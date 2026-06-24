@@ -1,0 +1,17 @@
+.DS_Store
+
+
+**/*.aux
+**/*.bcf
+**/*.fdb_latexmk
+**/*.fls
+**/*.lof
+**/*.log
+**/*.lot
+**/*.out
+**/*.pdf
+**/*.run.xml
+**/*.synctex.gz
+**/*.toc
+**/*.xdv
+
