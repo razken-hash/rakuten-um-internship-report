@@ -46,17 +46,11 @@
 
 % Bibliography
 \usepackage[backend=biber,style=ieee]{biblatex}
-% \addbibresource{references.bib}
+\addbibresource{others/bibliography/references.bib}
 
 
 % Chapter formatting
 \usepackage{titlesec}
-
-\titleformat{\chapter}
-{\Huge\bfseries}
-{\thechapter.}
-{20pt}
-{}
 
 % Header and footer
 \usepackage{fancyhdr}
@@ -70,10 +64,19 @@
 
 % ---------------- COVER PAGE ----------------
 
+\include{others/01_cover}
 
+% ---------------- PAGE NUMBERING ----------------
+
+\pagenumbering{Roman} 
+
+% ---------------- ACKNOWLEDGEMENT ----------------
+
+\include{others/02_acknowledgement}
 
 % ---------------- ABSTRACT ----------------
 
+\include{others/03_abstract}
 
 
 % ---------------- TABLE OF CONTENTS ----------------
@@ -88,13 +91,21 @@
 
 \listoftables
 
+% ---------------- LIST OF ABBREVIATIONS AND ACRONYMS ----------------
+
+\include{others/04_abbreviations_and_acronyms}
+
+% ---------------- PAGE NUMBERING ----------------
+
+\pagenumbering{arabic}
+
 % ---------------- INTRODUCTION ----------------
 
-
+\include{chapters/01_general_introduction}
 
 % ---------------- CHAPTER 1 ----------------
 
-
+\include{chapters/02_company_overview}
 
 % ---------------- CHAPTER 2 ----------------
 
@@ -114,6 +125,6 @@
 
 % ---------------- BIBLIOGRAPHY ----------------
 
-
+\include{others/bibliography/bibliography}
 
 \end{document}
