@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
   workflow_dispatch:
     inputs:
       report_name:
@@ -24,9 +25,9 @@ jobs:
       - name: Initialize report name
         run: |
           if [ -n "${{ inputs.report_name }}" ]; then
-            echo "SHORT_SHA=${{ inputs.report_name }}" >> $GITHUB_ENV
+            echo "REPORT_NAME=${{ inputs.report_name }}" >> $GITHUB_ENV
           else
-            echo "SHORT_SHA=report-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+            echo "REPORT_NAME=report-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           fi
 
       - name: Compile report
@@ -40,10 +41,10 @@ jobs:
 
       - name: Rename PDF
         run: |
-          mv src/main.pdf "${SHORT_SHA}.pdf"
+          mv src/main.pdf "${REPORT_NAME}.pdf"
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
         with:
           name: final-year-report
-          path: "${SHORT_SHA}.pdf"
+          path: "${{ env.REPORT_NAME }}.pdf"
