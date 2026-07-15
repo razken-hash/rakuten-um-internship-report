@@ -1,2 +1,230 @@
 \chapter{Tasks Performed}
 
+\section{Dark Mode Implementation on Frontend Applications}
+
+\clearpage
+
+\section{CI Report GCS Access}
+
+\subsection{Project Overview}
+
+\textbf{CI Report GCS Access} is a lightweight HTTP proxy developed to provide secure web access to Continuous Integration (CI) report artifacts stored in private Google Cloud Storage (GCS) buckets. The application exposes CI reports through standard HTTP endpoints while ensuring that the underlying storage remains inaccessible to the public.
+
+The service is primarily intended to simplify the consultation of automatically generated reports, allowing developers and quality assurance teams to open reports directly from a web browser without requiring direct authentication to Google Cloud Storage.
+
+The application is implemented using the \textbf{Hono} web framework and \textbf{TypeScript}, resulting in a lightweight, performant, and maintainable backend service.
+
+\subsection{Objectives}
+
+The project addresses several operational requirements encountered during the CI/CD workflow:
+
+\begin{itemize}
+    \item Keep Google Cloud Storage buckets private while allowing report visualization.
+    \item Provide authenticated access through a simple HTTP interface.
+    \item Eliminate the need for developers to manually interact with Google Cloud Storage.
+    \item Simplify report sharing between development teams.
+    \item Offer additional utilities such as report discovery and archive download.
+\end{itemize}
+
+\subsection{System Architecture}
+
+The application acts as an intermediary between clients and Google Cloud Storage. Rather than exposing storage buckets publicly, every request passes through the proxy, which authenticates using a Google Cloud service account before retrieving the requested object.
+
+The request processing workflow consists of the following steps:
+
+\begin{enumerate}
+    \item A client sends an HTTP request for a CI report.
+    \item The proxy translates the request URL into the corresponding Google Cloud Storage object path.
+    \item The requested object is retrieved using a service account with read-only permissions.
+    \item The object is streamed directly back to the client.
+\end{enumerate}
+
+This architecture ensures that sensitive storage resources remain protected while maintaining a simple and transparent user experience.
+
+\subsection{Technology Stack}
+
+The application is built upon the technologies listed in Table~\ref{tab:gcs-tech-stack}.
+
+\begin{table}[H]
+\centering
+\caption{Technology Stack}
+\label{tab:gcs-tech-stack}
+\begin{tabular}{|l|p{9cm}|}
+\hline
+\textbf{Technology} & \textbf{Purpose} \\
+\hline
+TypeScript & Main programming language \\
+\hline
+Hono & Lightweight HTTP framework \\
+\hline
+Node.js & JavaScript runtime environment \\
+\hline
+pnpm & Package manager \\
+\hline
+Google Cloud Storage & Storage of CI report artifacts \\
+\hline
+Google Cloud Service Account & Secure authentication to GCS \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Functionalities}
+
+The service centralizes access to CI reports and provides several features that simplify report management and consultation.
+
+\subsubsection{Secure Report Serving}
+
+The primary functionality of the application is to retrieve report files stored in private GCS buckets and serve them securely over HTTP. HTML reports can therefore be opened directly from a browser without exposing the storage bucket publicly.
+
+\subsubsection{Report Availability Verification}
+
+Before attempting to open a report, users can verify whether a specific report exists. This operation avoids downloading unnecessary data and simply returns whether the requested resource is available.
+
+\subsubsection{Automatic Report Discovery}
+
+The application can search a bucket and identify the most recently uploaded report whose folder name matches a given prefix or suffix. This feature is particularly useful for locating the latest CI execution without knowing its exact identifier.
+
+\subsubsection{Archive Download}
+
+Entire report directories can be downloaded as compressed ZIP archives. Every file belonging to a report folder is included while preserving the directory structure.
+
+\subsubsection{Bucket Listing}
+
+The application can enumerate all Google Cloud Storage buckets accessible by the configured service account, providing administrators with a quick overview of available resources.
+
+\subsubsection{Web User Interface}
+
+Besides its REST API, the application offers a simple graphical interface allowing users to perform the available operations without manually constructing HTTP requests.
+
+\subsection{Application Configuration}
+
+The application requires a minimal configuration before execution.
+
+The runtime environment is based on Node.js (version 24 or higher) together with the \texttt{pnpm} package manager (version 10 or higher). Authentication is performed using a Google Cloud service account possessing read-only permissions on the target storage bucket.
+
+The main configuration parameters are summarized in Table~\ref{tab:gcs-env}.
+
+\begin{table}[H]
+\centering
+\caption{Environment Variables}
+\label{tab:gcs-env}
+\begin{tabular}{|l|c|c|p{6cm}|}
+\hline
+\textbf{Variable} & \textbf{Required} & \textbf{Default} & \textbf{Description} \\
+\hline
+\makecell{GOOGLE\_CLOUD\\\_SERVICE\_\\CREDENTIALS\_JSON} & Yes & -- & JSON service account credentials used to authenticate with Google Cloud Storage. \\
+\hline
+NODE\_ENV & No & development & Runtime environment. \\
+\hline
+PORT & No & 3000 & HTTP server listening port. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Application Programming Interface}
+
+The application exposes several REST endpoints to interact with Google Cloud Storage.
+
+\subsubsection{Report Proxy}
+
+The \texttt{/gcs} endpoint serves report files stored inside a bucket. When a directory is requested, the application automatically returns the \texttt{index.html} file.
+
+\begin{table}[H]
+\centering
+\caption{Report Proxy Endpoints}
+\begin{tabular}{|p{6cm}|p{7cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Description} \\
+\hline
+GET /gcs/\{bucket\}/\{reportId\}/ & Returns the report index page. \\
+\hline
+GET /gcs/\{bucket\}/\{reportId\}/\{objectPath\} & Returns a specific file from the report. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Report Existence Verification}
+
+The \texttt{/check-exist} endpoint verifies whether a report or one of its files exists inside a bucket.
+
+\begin{table}[H]
+\centering
+\caption{Report Verification Endpoint}
+\begin{tabular}{|p{6cm}|p{7cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Purpose} \\
+\hline
+GET /check-exist/\{bucket\}/\{reportId\} & Returns whether the report exists. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Report Search}
+
+The \texttt{/search} endpoint retrieves the latest report folder matching either a prefix or a suffix.
+
+\begin{table}[H]
+\centering
+\caption{Search Endpoints}
+\begin{tabular}{|p{6cm}|p{7cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Description} \\
+\hline
+GET /search/\{bucket\}/prefix=\{value\} & Finds the newest folder beginning with the specified prefix. \\
+\hline
+GET /search/\{bucket\}/suffix=\{value\} & Finds the newest folder ending with the specified suffix. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Folder Download}
+
+The \texttt{/download} endpoint generates a ZIP archive containing every file belonging to a report folder.
+
+\begin{table}[H]
+\centering
+\caption{Download Endpoint}
+\begin{tabular}{|p{6cm}|p{7cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Description} \\
+\hline
+GET /download/\{bucket\}/\{folderPath\} & Downloads the selected report folder as a ZIP archive. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Bucket Enumeration}
+
+The application also exposes an endpoint for listing every Google Cloud Storage bucket accessible by the configured service account.
+
+\begin{table}[H]
+\centering
+\caption{Bucket Listing Endpoint}
+\begin{tabular}{|p{6cm}|p{7cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Description} \\
+\hline
+GET /buckets & Returns all accessible GCS buckets. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Testing}
+
+The project includes integration tests that communicate directly with a dedicated Google Cloud Storage testing bucket. Authentication is performed using the same service account credentials employed by the application.
+
+The tests validate the following functionalities:
+
+\begin{itemize}
+    \item Retrieval of report files.
+    \item Report existence verification.
+    \item Report search operations.
+    \item ZIP archive generation.
+    \item Bucket listing.
+\end{itemize}
+
+When the required credentials are not available, the integration tests are automatically skipped.
+
+\subsection{Summary}
+
+CI Report GCS Access provides a secure and efficient solution for exposing CI-generated reports stored in private Google Cloud Storage buckets. By acting as an authenticated proxy, the application preserves storage security while offering a simple HTTP interface for report visualization, search, verification, and download. Its lightweight architecture, modern technology stack, and integration with Google Cloud Storage make it an effective tool for improving accessibility to Continuous Integration artifacts within the development workflow.
