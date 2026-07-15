@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+  release:
+    types: [created]
+
   workflow_dispatch:
     inputs:
       report_name:
@@ -48,3 +51,9 @@ jobs:
         with:
           name: final-year-report
           path: "${{ env.REPORT_NAME }}.pdf"
+
+      - name: Upload PDF to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "${{ env.REPORT_NAME }}.pdf"
