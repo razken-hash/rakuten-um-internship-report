@@ -21,6 +21,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Initialize report name
+        run: |
+          if [ -n "${{ inputs.report_name }}" ]; then
+            echo "SHORT_SHA=${{ inputs.report_name }}" >> $GITHUB_ENV
+          else
+            echo "SHORT_SHA=report-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          fi
+
       - name: Compile report
         uses: xu-cheng/latex-action@v4
         with:
@@ -32,14 +40,10 @@ jobs:
 
       - name: Rename PDF
         run: |
-          SHORT_SHA="${{ inputs.report_name }}"
-          if [ -z "$SHORT_SHA" ]; then
-            SHORT_SHA=$(git rev-parse --short HEAD)
-          fi
-          mv src/main.pdf "report-${SHORT_SHA}.pdf"
+          mv src/main.pdf "${SHORT_SHA}.pdf"
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
         with:
           name: final-year-report
-          path: report.pdf
+          path: "${SHORT_SHA}.pdf"
