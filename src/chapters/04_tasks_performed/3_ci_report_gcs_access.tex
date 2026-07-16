@@ -1,224 +1,179 @@
-\section{CI Report GCS Access}
+\section{Development of a Reverse Proxy for Google Cloud Storage}
+\label{sec:gcs-proxy}
 
-\subsection{Project Overview}
+\subsection{Context}
+\acf{CI} pipelines automatically generate numerous artifacts such as Playwright reports, Cypress reports, visual regression reports, code coverage reports and static analysis reports. These artifacts are essential for validating software quality and approving pull requests throughout the development lifecycle.
 
-\textbf{CI Report GCS Access} is a lightweight HTTP proxy developed to provide secure web access to Continuous Integration (CI) report artifacts stored in private Google Cloud Storage (GCS) buckets. The application exposes CI reports through standard HTTP endpoints while ensuring that the underlying storage remains inaccessible to the public.
+Initially, these reports were stored using GitHub Actions Artifacts. Although this solution integrates naturally with GitHub workflows, it presents several limitations. The storage consumed by artifacts continuously increases over time, especially for large visual regression reports, leading to higher infrastructure costs. Moreover, GitHub artifacts cannot be accessed directly through a web browser. Developers must download the archive, extract its contents, and open the report locally before consulting it.
 
-The service is primarily intended to simplify the consultation of automatically generated reports, allowing developers and quality assurance teams to open reports directly from a web browser without requiring direct authentication to Google Cloud Storage.
+To overcome these limitations, Rakuten France decided to migrate \ac{CI} artifacts to private \acf{GCS} buckets. \ac{GCS} provides scalable, durable and cost-effective object storage. However, because the buckets remain private, reports cannot be accessed without Google Cloud authentication.
 
-The application is implemented using the \textbf{Hono} web framework and \textbf{TypeScript}, resulting in a lightweight, performant, and maintainable backend service.
+To provide secure yet transparent access to these reports, a reverse proxy application was developed. The application authenticates against Google Cloud Storage on behalf of internal users and exposes reports through \acs{HTTP} endpoints while keeping the storage infrastructure completely private.
 
 \subsection{Objectives}
 
-The project addresses several operational requirements encountered during the CI/CD workflow:
+The project pursued both technical and educational objectives.
 
 \begin{itemize}
-    \item Keep Google Cloud Storage buckets private while allowing report visualization.
-    \item Provide authenticated access through a simple HTTP interface.
-    \item Eliminate the need for developers to manually interact with Google Cloud Storage.
-    \item Simplify report sharing between development teams.
-    \item Offer additional utilities such as report discovery and archive download.
+\item Keep Google Cloud Storage buckets private and secure.
+\item Allow internal access to reports through a Rakuten web application.
+\item Simplify report consultation directly from a browser.
+\item Provide report discovery, verification and download features.
+\item Discover the complete software lifecycle from requirements analysis to deployment and maintenance.
 \end{itemize}
 
 \subsection{System Architecture}
 
-The application acts as an intermediary between clients and Google Cloud Storage. Rather than exposing storage buckets publicly, every request passes through the proxy, which authenticates using a Google Cloud service account before retrieving the requested object.
+The application follows a reverse proxy architecture. Every request is received by the proxy instead of directly reaching Google Cloud Storage.
 
-The request processing workflow consists of the following steps:
+\begin{figure}[H]
+\centering
+\includegraphics[width=.95\textwidth]{../assets/tools/rakuten_technical_environment.png}
+\caption{Overall architecture of the reverse proxy.}
+\label{fig:gcs_architecture}
+\end{figure}
+
+The processing workflow is summarized below:
 
 \begin{enumerate}
-    \item A client sends an HTTP request for a CI report.
-    \item The proxy translates the request URL into the corresponding Google Cloud Storage object path.
-    \item The requested object is retrieved using a service account with read-only permissions.
-    \item The object is streamed directly back to the client.
+\item Receive an incoming HTTP request.
+\item Extract the bucket name and object path.
+\item Authenticate using a Google Cloud Service Account.
+\item Reuse a cached OAuth token whenever possible.
+\item Request the object through the Google Cloud Storage API.
+\item Stream the object directly to the client.
+\item Return the corresponding HTTP response.
 \end{enumerate}
 
-This architecture ensures that sensitive storage resources remain protected while maintaining a simple and transparent user experience.
+\subsection{Authentication and Token Caching}
+
+The Infrastructure team provides the application with a Google Cloud Service Account JSON credential. During startup, the application loads these credentials and generates an OAuth access token.
+
+Since generating a token for every request would introduce unnecessary latency, the application stores the generated token in memory until its expiration time. When the token expires, a new one is automatically generated and replaces the previous token. This caching strategy significantly reduces authentication overhead under heavy workloads.
+
+\subsection{Streaming Mechanism}
+
+Instead of downloading the complete object before sending it to the client, the application streams files directly from Google Cloud Storage to the HTTP response. Streaming reduces memory consumption, decreases latency, and allows very large HTML reports and visual regression artifacts to be served efficiently.
 
 \subsection{Technology Stack}
 
-The application is built upon the technologies listed in Table~\ref{tab:gcs-tech-stack}.
+The project is developed using TypeScript as the primary programming language, with
+Node.js as the runtime environment and pnpm as the package manager. The HTTP server
+is implemented using the Hono framework, a lightweight and high-performance web
+framework designed for building modern HTTP servers and APIs with JavaScript and
+TypeScript.
 
-\begin{table}[H]
+\textbf{Hono} is based on Web Standard APIs, enabling applications to run across multiple
+runtimes such as Node.js, Bun, Deno, and Cloudflare Workers. It also provides a simple Express-like routing system while maintaining a minimal footprint.
+
+The web interface of the application is developed using standard web technologies,
+including HTML, CSS, and JavaScript.
+ 
+Google Cloud Storage is used as the storage solution for hosting CI-generated
+artifacts, while Google Cloud Service Account credentials provide secure and
+controlled authentication for accessing cloud resources.
+
+The project source code is hosted in an internal GitHub organization repository,
+ensuring that access is restricted to authorized users within the company.
+
+\subsection{REST API}
+
+The application exposes several REST endpoints.
+
+\subsubsection{Functional Endpoints}
+
+The basic endpoint structure is defined as follows:
+
+\[
+\texttt{<Operation>/<Bucket\ name>/<FilePath>}
+\]
+
+where the \texttt{FilePath} parameter can represent either a direct file name
+or a nested path pointing to a file or folder within the specified bucket.
+
+Concretely, the application provides the following endpoints:
+
+\begin{itemize}
+    \item \texttt{GET /gcs/<bucket>/<filePath>}: Serve a report file directly from Google Cloud Storage.
+    \item \texttt{GET /download/<bucket>/<filePath>}: Download a report or a set of files as a ZIP archive.
+    \item \texttt{GET /check-exist/<bucket>/<filePath>}: Verify whether a specific report or file exists.
+    \item \texttt{GET /search/<bucket>/<filePath>}: Search for the latest report matching a given prefix or suffix.
+    \item \texttt{GET /buckets}: List all accessible Google Cloud Storage buckets.
+\end{itemize}
+
+\subsubsection{Operational Endpoints}
+
+Besides the functional API, several operational endpoints facilitate monitoring and maintenance.
+
+\paragraph{Web Interface}
+
+A lightweight web interface available at \texttt{/} allows users to execute supported operations without manually constructing HTTP requests.
+
+Figures~\ref{fig:file_existence_check}  illustrate the web interface (in light mode) for checking the existence of a report file.
+
+\begin{figure}[H]
 \centering
-\caption{Technology Stack}
-\label{tab:gcs-tech-stack}
-\begin{tabular}{|l|p{9cm}|}
-\hline
-\textbf{Technology} & \textbf{Purpose} \\
-\hline
-TypeScript & Main programming language \\
-\hline
-Hono & Lightweight HTTP framework \\
-\hline
-Node.js & JavaScript runtime environment \\
-\hline
-pnpm & Package manager \\
-\hline
-Google Cloud Storage & Storage of CI report artifacts \\
-\hline
-Google Cloud Service Account & Secure authentication to GCS \\
-\hline
-\end{tabular}
-\end{table}
+\includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/file_exist_dark_.png}
+\caption{Web interface for checking the existence of a report file.}
+\label{fig:file_existence_check}
+\end{figure}
 
-\subsection{Functionalities}
+Figure~\ref{fig:file_non_existence_check} illustrates the web interface (in dark mode) for checking the non-existence of a report file.
 
-The service centralizes access to CI reports and provides several features that simplify report management and consultation.
-
-\subsubsection{Secure Report Serving}
-
-The primary functionality of the application is to retrieve report files stored in private GCS buckets and serve them securely over HTTP. HTML reports can therefore be opened directly from a browser without exposing the storage bucket publicly.
-
-\subsubsection{Report Availability Verification}
-
-Before attempting to open a report, users can verify whether a specific report exists. This operation avoids downloading unnecessary data and simply returns whether the requested resource is available.
-
-\subsubsection{Automatic Report Discovery}
-
-The application can search a bucket and identify the most recently uploaded report whose folder name matches a given prefix or suffix. This feature is particularly useful for locating the latest CI execution without knowing its exact identifier.
-
-\subsubsection{Archive Download}
-
-Entire report directories can be downloaded as compressed ZIP archives. Every file belonging to a report folder is included while preserving the directory structure.
-
-\subsubsection{Bucket Listing}
-
-The application can enumerate all Google Cloud Storage buckets accessible by the configured service account, providing administrators with a quick overview of available resources.
-
-\subsubsection{Web User Interface}
-
-Besides its REST API, the application offers a simple graphical interface allowing users to perform the available operations without manually constructing HTTP requests.
-
-\subsection{Application Configuration}
-
-The application requires a minimal configuration before execution.
-
-The runtime environment is based on Node.js (version 24 or higher) together with the \texttt{pnpm} package manager (version 10 or higher). Authentication is performed using a Google Cloud service account possessing read-only permissions on the target storage bucket.
-
-The main configuration parameters are summarized in Table~\ref{tab:gcs-env}.
-
-\begin{table}[H]
+\begin{figure}[H]
 \centering
-\caption{Environment Variables}
-\label{tab:gcs-env}
-\begin{tabular}{|l|c|c|p{6cm}|}
-\hline
-\textbf{Variable} & \textbf{Required} & \textbf{Default} & \textbf{Description} \\
-\hline
-\makecell{GOOGLE\_CLOUD\\\_SERVICE\_\\CREDENTIALS\_JSON} & Yes & -- & JSON service account credentials used to authenticate with Google Cloud Storage. \\
-\hline
-NODE\_ENV & No & development & Runtime environment. \\
-\hline
-PORT & No & 3000 & HTTP server listening port. \\
-\hline
-\end{tabular}
-\end{table}
+\includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/file_not_exist_light_.png}
+\caption{Web interface for checking the non-existence of a report file.}
+\label{fig:file_non_existence_check}
+\end{figure}
 
-\subsection{Application Programming Interface}
+\paragraph{Health Check}
 
-The application exposes several REST endpoints to interact with Google Cloud Storage.
+The endpoint \texttt{/health} is used by Consul to verify service availability. Figure~\ref{fig:consul_health_check} illustrates the health check of the deployed application on Consul.
 
-\subsubsection{Report Proxy}
-
-The \texttt{/gcs} endpoint serves report files stored inside a bucket. When a directory is requested, the application automatically returns the \texttt{index.html} file.
-
-\begin{table}[H]
+\begin{figure}[H]
 \centering
-\caption{Report Proxy Endpoints}
-\begin{tabular}{|p{6cm}|p{7cm}|}
-\hline
-\textbf{Endpoint} & \textbf{Description} \\
-\hline
-GET /gcs/\{bucket\}/\{reportId\}/ & Returns the report index page. \\
-\hline
-GET /gcs/\{bucket\}/\{reportId\}/\{objectPath\} & Returns a specific file from the report. \\
-\hline
-\end{tabular}
-\end{table}
+\includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/consul_health_check.png}
+\caption{The Reverse Proxy Health check on Consul}
+\label{fig:consul_health_check}
+\end{figure}
 
-\subsubsection{Report Existence Verification}
+\paragraph{Metrics}
 
-The \texttt{/check-exist} endpoint verifies whether a report or one of its files exists inside a bucket.
+The endpoint \texttt{/metrics} exposes Prometheus-compatible metrics for application monitoring.
 
-\begin{table}[H]
+\paragraph{API Documentation}
+
+Interactive API documentation is generated and exposed through Swagger/OpenAPI. Figure~\ref{fig:openapi_documentation} shows the Swagger UI interface for the reverse proxy.
+
+\begin{figure}[H]
 \centering
-\caption{Report Verification Endpoint}
-\begin{tabular}{|p{6cm}|p{7cm}|}
-\hline
-\textbf{Endpoint} & \textbf{Purpose} \\
-\hline
-GET /check-exist/\{bucket\}/\{reportId\} & Returns whether the report exists. \\
-\hline
-\end{tabular}
-\end{table}
-
-\subsubsection{Report Search}
-
-The \texttt{/search} endpoint retrieves the latest report folder matching either a prefix or a suffix.
-
-\begin{table}[H]
-\centering
-\caption{Search Endpoints}
-\begin{tabular}{|p{6cm}|p{7cm}|}
-\hline
-\textbf{Endpoint} & \textbf{Description} \\
-\hline
-GET /search/\{bucket\}/prefix=\{value\} & Finds the newest folder beginning with the specified prefix. \\
-\hline
-GET /search/\{bucket\}/suffix=\{value\} & Finds the newest folder ending with the specified suffix. \\
-\hline
-\end{tabular}
-\end{table}
-
-\subsubsection{Folder Download}
-
-The \texttt{/download} endpoint generates a ZIP archive containing every file belonging to a report folder.
-
-\begin{table}[H]
-\centering
-\caption{Download Endpoint}
-\begin{tabular}{|p{6cm}|p{7cm}|}
-\hline
-\textbf{Endpoint} & \textbf{Description} \\
-\hline
-GET /download/\{bucket\}/\{folderPath\} & Downloads the selected report folder as a ZIP archive. \\
-\hline
-\end{tabular}
-\end{table}
-
-\subsubsection{Bucket Enumeration}
-
-The application also exposes an endpoint for listing every Google Cloud Storage bucket accessible by the configured service account.
-
-\begin{table}[H]
-\centering
-\caption{Bucket Listing Endpoint}
-\begin{tabular}{|p{6cm}|p{7cm}|}
-\hline
-\textbf{Endpoint} & \textbf{Description} \\
-\hline
-GET /buckets & Returns all accessible GCS buckets. \\
-\hline
-\end{tabular}
-\end{table}
+\includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/openapi_documentation.png}
+\caption{Interactive API Swagger UI Documentation}
+\label{fig:openapi_documentation}
+\end{figure}
 
 \subsection{Testing}
 
-The project includes integration tests that communicate directly with a dedicated Google Cloud Storage testing bucket. Authentication is performed using the same service account credentials employed by the application.
+A dedicated Google Cloud Storage bucket was created for integration testing.
 
-The tests validate the following functionalities:
+The test suite validates:
 
 \begin{itemize}
-    \item Retrieval of report files.
-    \item Report existence verification.
-    \item Report search operations.
-    \item ZIP archive generation.
-    \item Bucket listing.
+\item Retrieval of HTML reports.
+\item Retrieval of JSON resources.
+\item Retrieval of static assets.
+\item Access to non-existing objects.
+\item Report discovery.
+\item Report download.
+\item Bucket listing.
+\item Token caching under concurrent requests.
 \end{itemize}
 
-When the required credentials are not available, the integration tests are automatically skipped.
+Load tests were also performed to verify that cached authentication tokens are effectively reused, reducing the number of OAuth authentication requests while maintaining low response times.
 
 \subsection{Summary}
 
-CI Report GCS Access provides a secure and efficient solution for exposing CI-generated reports stored in private Google Cloud Storage buckets. By acting as an authenticated proxy, the application preserves storage security while offering a simple HTTP interface for report visualization, search, verification, and download. Its lightweight architecture, modern technology stack, and integration with Google Cloud Storage make it an effective tool for improving accessibility to Continuous Integration artifacts within the development workflow.
+The developed reverse proxy provides secure and efficient access to CI artifacts stored in private Google Cloud Storage buckets. By combining authenticated access, token caching, streaming, monitoring endpoints and a simple web interface, the application improves report accessibility while preserving the security of the underlying storage infrastructure. Furthermore, the project provided valuable experience covering the complete software engineering lifecycle, from requirements analysis and architecture design to implementation, testing and deployment.
+
+\clearpage
