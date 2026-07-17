@@ -1,3 +1,356 @@
-\section{Storybook Update with MCP}
+\section{Modernizing the \texttt{next-common} Storybook \& Discovery of MCP}
+\label{sec:storybook-mcp}
+
+\subsection{Context}
+
+\lstinline|next-common| is the shared front-end foundation used across several product teams at Rakuten France. It provides common React components, hooks, design tokens and tooling that are consumed by downstream applications. Because every team depends on it, any friction in its build pipeline, its component workshop (Storybook) or its runtime environment is amplified across the entire organization.
+
+During this internship, I was assigned three connected tasks on the \lstinline|next-common| codebase:
+
+\begin{enumerate}
+    \item Upgrade the runtime toolchain to \textbf{Node.js 24} and \textbf{pnpm 10}, both in local development and in CI.
+    \item Upgrade \textbf{Storybook to v10}, adapt the configuration to its breaking changes, and explore the newly released \textbf{Storybook MCP server}.
+    \item Integrate the \textbf{Storybook Performance Panel} addon so developers can detect performance regressions while writing stories.
+\end{enumerate}
+
+Although the three tasks were tracked as separate tickets, they form a coherent modernization effort: the Node/pnpm upgrade unblocks the Storybook upgrade, and the Storybook upgrade unlocks the ecosystem of v10-compatible addons --- including the Performance Panel. This chapter presents them in that logical order, explains the reasoning behind each decision, documents the migration issues I encountered, and reflects on what I learned from working directly on a shared internal platform.
+
+\begin{quote}
+\textbf{Chapter objectives}
+\begin{itemize}
+    \item Explain the technical and organizational rationale for each upgrade.
+    \item Detail the concrete changes made to \lstinline|package.json|, GitHub Actions workflows, Docker images, Storybook configuration and CI paths.
+    \item Document breaking changes and migration steps so future contributors can consult this chapter as a reference.
+    \item Present the Storybook MCP server exploration and the value it brings to an AI-assisted development workflow.
+    \item Assess the impact of the Performance Panel addon on the day-to-day developer experience.
+\end{itemize}
+\end{quote}
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~1 \vspace{2cm}}}
+    \caption{High-level overview of the \texttt{next-common} platform and the three modernization tasks.}
+    \label{fig:x1-overview}
+\end{figure}
+
+\subsection{Task 1 --- Upgrading the Runtime: Node.js 24 and pnpm 10}
+\label{sec:task1-runtime}
+
+\subsubsection{Context and rationale}
+
+The \lstinline|next-common| repository was still standardized on \textbf{Node.js 20} and \textbf{pnpm 8/9} at the beginning of the task. Two factors made this an increasingly costly choice:
+
+\begin{itemize}
+    \item According to the \href{https://nodejs.org/en/about/previous-releases}{official Node.js release schedule}, Node 20 is no longer the \emph{Active LTS} line --- \textbf{Node 24 is now the Active LTS release}. Staying on Node 20 meant working against a runtime that is closer to \emph{Maintenance} mode, with fewer performance improvements and no access to the newer language and V8 features already relied upon by parts of our ecosystem.
+    \item The organization had already adopted \textbf{pnpm 10} in most other repositories for several months. \lstinline|next-common| being pinned to an older major version created inconsistencies: contributors regularly hit \lstinline|ERR_PNPM_UNSUPPORTED_ENGINE|-style errors, and the lockfile format drifted from what other repositories produced.
+\end{itemize}
+
+The objective was therefore to align \lstinline|next-common| with the rest of the ecosystem: \textbf{Node 24 and pnpm 10 everywhere} --- in local development, in CI, and in the Docker images used for end-to-end testing.
+
+\subsubsection{Scope of changes}
+
+The upgrade touched four categories of files:
+
+\begin{table}[h]
+    \centering
+    \caption{Scope of the Node/pnpm upgrade}
+    \label{tab:node-pnpm-scope}
+    \begin{tabular}{@{}p{2.7cm}p{4.2cm}p{7.5cm}@{}}
+        \toprule
+        \textbf{Area} & \textbf{File(s)} & \textbf{Change} \\
+        \midrule
+        Package manifests & Every \lstinline|package.json| in the monorepo & \lstinline|engines.node| set to \lstinline|>=24|, \lstinline|engines.pnpm| set to \lstinline|>=10|, \lstinline|packageManager| field updated to \lstinline|pnpm@10.*|. \\
+        CI workflows & \lstinline|.github/workflows/*.yml| & \lstinline|actions/setup-node@v4| bumped to \lstinline|node-version: 24|, \lstinline|pnpm/action-setup@v4| bumped to \lstinline|version: 10|. Cache keys refreshed to invalidate previous Node 20 / pnpm 9 caches. \\
+        Docker image & \lstinline|build-publish-dockerfile.sh|, \lstinline|Dockerfile| & Base image changed to a Cypress browsers image built on Node 24. \\
+        Documentation & \lstinline|README.md|, \lstinline|CONTRIBUTING.md| & Prerequisites section updated. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The Docker image name changed to reflect the new runtime baseline:
+
+\begin{lstlisting}[language=bash]
+IMAGE_TAG=registry-dev.babel.fr/base/cypress/browsers:node-24-pnpm-10-chrome-125.0.6422.60-1-ff-126.0-edge-125.0.2535.51-1
+\end{lstlisting}
+
+And the \lstinline|Dockerfile| was rebased on:
+
+\begin{lstlisting}[]
+FROM cypress/browsers:node-24-chrome-125.0.6422.60-1-ff-126.0-edge-125.0.2535.51-1
+\end{lstlisting}
+
+pnpm 10 is installed on top of this base image during the build, then the tag published to the internal registry is used by all downstream CI jobs (unit tests, Storybook build, Cypress end-to-end).
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~2 \vspace{2cm}}}
+    \caption{Diff summary of the Node/pnpm upgrade across \texttt{package.json} files.}
+    \label{fig:x2-diff}
+\end{figure}
+
+\subsubsection{Issues encountered and fixes}
+
+Bumping two major versions of the toolchain at once revealed several latent issues in the codebase and in the CI pipelines. The most notable ones:
+
+\begin{itemize}
+    \item \textbf{pnpm 10 stricter dependency resolution.} pnpm 10 enforces \lstinline|hoisted-node-linker| and \lstinline|dedupe-peer-dependents| more strictly than pnpm 9. A handful of packages that were implicitly relying on hoisted transitive dependencies started failing to resolve their imports. I fixed this by declaring the missing peer/direct dependencies explicitly in the offending \lstinline|package.json| files instead of relying on hoisting.
+    \item \textbf{\lstinline|pnpm install --frozen-lockfile| in CI.} The lockfile format was regenerated by pnpm 10. I regenerated \lstinline|pnpm-lock.yaml| locally on Node 24 / pnpm 10 and committed it in a dedicated commit so reviewers could isolate the lockfile churn from the actual code changes.
+    \item \textbf{Cache key invalidation.} CI jobs use a hash of \lstinline|pnpm-lock.yaml| and the pnpm version as the cache key. Because both changed, the first CI run after the upgrade did a cold install; subsequent runs re-hit the cache normally.
+    \item \textbf{Native modules rebuild.} A few native dependencies (\lstinline|sharp|, \lstinline|node-gyp|-backed libraries used by the image processing pipeline) had to be rebuilt for Node 24. This was handled transparently by pnpm's post-install scripts once the correct Node was in the image.
+    \item \textbf{CI path adjustments.} Some CI steps referenced Node-20-specific paths (for example, cached Corepack directories). These were generalized so the pipeline no longer depends on a specific major version.
+\end{itemize}
+
+\subsubsection{Delivery}
+
+The work was delivered as a pull request against \lstinline|release/always-improve-always-advance| on the internal \lstinline|RakutenFrance/next-common| repository. The PR contained:
+
+\begin{itemize}
+    \item The \lstinline|package.json| \lstinline|engines| and \lstinline|packageManager| updates.
+    \item Updated GitHub Actions workflows.
+    \item The new \lstinline|Dockerfile| and \lstinline|build-publish-dockerfile.sh|.
+    \item The regenerated \lstinline|pnpm-lock.yaml|.
+    \item A short migration note in the README explaining that contributors must now use Node 24 and pnpm 10 (and pointing to \lstinline|nvm use| / Corepack instructions).
+\end{itemize}
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~3 \vspace{2cm}}}
+    \caption{Green CI pipeline after the Node/pnpm upgrade.}
+    \label{fig:x3-ci}
+\end{figure}
+
+\subsection{Task 2 --- Upgrading Storybook to v10}
+\label{sec:task2-storybook}
+
+\subsubsection{Why upgrade Storybook}
+
+Storybook is not a peripheral tool in \lstinline|next-common|: it is the primary interface through which product teams discover, review and validate shared components. It also acts as our visual regression baseline and a lightweight design-system documentation site.
+
+Upgrading to \textbf{Storybook 10} was motivated by four considerations:
+
+\begin{enumerate}
+    \item \textbf{Performance.} Storybook 10 ships significant improvements to the dev server startup time and to the on-demand story loading pipeline. On a repository the size of \lstinline|next-common|, this directly reduces the feedback loop for every front-end contributor.
+    \item \textbf{Security and maintenance.} Older Storybook majors accumulate transitive vulnerabilities (mostly around webpack, node-forge, and various markdown/serialization dependencies). Staying on a supported major is the cheapest security posture.
+    \item \textbf{Avoiding breaking-change debt.} Skipping majors is more expensive than upgrading incrementally, because breaking changes compound. Migrating one major at a time keeps the diff reviewable.
+    \item \textbf{Ecosystem alignment.} Several addons we depend on had already dropped support for older Storybook majors. Upgrading unlocked v10-only addons --- most importantly, the Performance Panel that is the subject of Task 3.
+\end{enumerate}
+
+\subsubsection{Migration strategy}
+
+Rather than doing a big-bang upgrade, I followed a four-step migration plan:
+
+\begin{enumerate}
+    \item \textbf{Inventory.} List every Storybook-related dependency currently installed (\lstinline|storybook|, \lstinline|@storybook/*|, framework packages, builder packages, community addons, internal custom addons).
+    \item \textbf{Automated migration.} Run Storybook's official codemod: \lstinline|pnpm dlx storybook@latest upgrade|. This handles the majority of the mechanical changes to \lstinline|.storybook/main.ts|, \lstinline|.storybook/preview.ts|, and package versions.
+    \item \textbf{Manual review.} Read the \href{https://storybook.js.org/docs/migration-guide}{Storybook 10 migration guide} and manually apply the changes the codemod cannot infer --- mainly around addon registration, framework configuration, and custom Vite/webpack settings.
+    \item \textbf{CI validation.} Run \lstinline|pnpm book| and \lstinline|pnpm book:build| locally, then push to a feature branch and let CI confirm the build succeeds in a clean environment.
+\end{enumerate}
+
+\subsubsection{Configuration changes}
+
+\paragraph{\texorpdfstring{\lstinline|.storybook/main.ts|}{.storybook/main.ts}}
+
+The v10 configuration is stricter about typing and about the shape of the \lstinline|framework| entry. The relevant changes were:
+
+\begin{itemize}
+    \item \lstinline|framework| is now an object of the form \lstinline|{ name: '@storybook/nextjs-vite', options: { ... } }| --- the old string form is deprecated.
+    \item \lstinline|stories| glob patterns were adjusted to explicitly include \lstinline|.mdx| files rather than relying on the previous auto-discovery.
+    \item Several deprecated top-level options (\lstinline|features|, \lstinline|core.builder| as a string) were replaced by their v10 equivalents.
+    \item \lstinline|docs.autodocs| was renamed to \lstinline|docs.autodocs: 'tag'| and stories now opt in via the \lstinline|autodocs| tag rather than the previous heuristic.
+\end{itemize}
+
+\paragraph{\texorpdfstring{\lstinline|.storybook/preview.ts|}{.storybook/preview.ts}}
+
+\begin{itemize}
+    \item The default export is now typed as \lstinline|Preview| (imported from the framework package) instead of loosely typed as \lstinline|Parameters|.
+    \item Global decorators were reorganized so that provider decorators (theme, i18n, router) compose cleanly with addon decorators.
+    \item The \lstinline|parameters.docs| shape changed slightly for the new Docs 2 renderer; I updated our custom MDX docs pages accordingly.
+\end{itemize}
+
+\paragraph{Framework and builder packages}
+
+\lstinline|next-common| uses the Next.js + Vite framework combination. The upgrade required:
+
+\begin{itemize}
+    \item Replacing \lstinline|@storybook/nextjs| with \lstinline|@storybook/nextjs-vite| (already the recommended path in v10).
+    \item Bumping the Vite peer dependency to a version compatible with both Storybook 10 and our existing Vite plugins.
+\end{itemize}
+
+\subsubsection{Addon compatibility audit}
+
+Every addon had to be re-evaluated for v10 support. I produced a small compatibility matrix during the migration:
+
+\begin{table}[h]
+    \centering
+    \caption{Addon compatibility matrix for the Storybook v10 upgrade}
+    \label{tab:addon-compat}
+    \begin{tabular}{@{}p{3.8cm}p{3.8cm}p{6.5cm}@{}}
+        \toprule
+        \textbf{Addon} & \textbf{v10 status} & \textbf{Action taken} \\
+        \midrule
+        \lstinline|@storybook/addon-essentials| & Split into individual addons in v10 & Replaced with the explicit sub-addons we actually use (controls, actions, viewport, backgrounds, measure, outline). \\
+        \lstinline|@storybook/addon-a11y| & Compatible & Upgraded to matching v10 version. \\
+        \lstinline|@storybook/addon-links| & Compatible & Upgraded. \\
+        \lstinline|@storybook/addon-interactions| & Compatible, API mostly stable & Upgraded; minor changes to \lstinline|play| typing. \\
+        Internal custom addon (design tokens) & Needed migration & Updated to the new manager/preview entry-point split; registered via the v10 addon API. \\
+        Community MDX-based addons & Mixed & One addon was replaced by a supported alternative; another was removed because its use case is now covered by native Storybook v10 features. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~4 \vspace{2cm}}}
+    \caption{\texttt{next-common} Storybook running on v10, showing the sidebar, canvas and addon panels.}
+    \label{fig:x4-storybook10}
+\end{figure}
+
+\subsubsection{Build and CI issues encountered}
+
+The upgrade was not silent --- a few issues required real investigation:
+
+\begin{itemize}
+    \item \textbf{MDX 3 parser strictness.} Storybook 10 uses a newer MDX parser that rejects several previously tolerated constructs (unescaped \lstinline|<|, JSX comments outside of expressions). A handful of docs pages had to be adjusted.
+    \item \textbf{Vite dependency pre-bundling.} After the upgrade, cold \lstinline|pnpm book| starts were slower than expected because Vite was re-pre-bundling on every start. Adding an explicit \lstinline|optimizeDeps.include| entry for our largest internal packages fixed this.
+    \item \textbf{CI memory footprint.} \lstinline|pnpm book:build| briefly exceeded the CI runner's memory limit due to the concurrent MDX and React Docgen extraction. I split the build step to run static analysis and asset compilation sequentially, and the memory usage dropped back well under the limit.
+    \item \textbf{Snapshot test churn.} A few visual regression baselines changed because Storybook 10 renders story containers with slightly different default padding. I reviewed the diffs manually and re-approved the new baselines.
+\end{itemize}
+
+\subsubsection{Acceptance criteria --- verification}
+
+Against the acceptance criteria of the ticket:
+
+\begin{itemize}
+    \item Storybook dependencies in \lstinline|next-common| are upgraded to v10. \textbf{Verified} via \lstinline|pnpm list "storybook*"|.
+    \item \lstinline|pnpm book| starts successfully and loads \lstinline|next-common| stories. \textbf{Verified} locally on macOS and on Linux (the CI runner image).
+    \item \lstinline|pnpm book:build| succeeds locally and in CI. \textbf{Verified} --- the CI job is green.
+    \item Key addons still work (or are replaced with supported alternatives). \textbf{Verified} through the compatibility matrix above.
+\end{itemize}
+
+\subsubsection{Exploring the Storybook MCP server}
+
+Storybook 10 introduced a \textbf{Model Context Protocol (MCP) server} --- an integration point that lets AI assistants (like the one in the IDE I use daily) query Storybook's story index, read story metadata, and reason about component APIs without needing to scrape the running UI or the file system directly.
+
+I spent time exploring this new capability because it is directly relevant to the ``always-improve-always-advance'' theme of the internship: it changes how developers can interact with the component library.
+
+\textbf{What I did to explore it:}
+
+\begin{itemize}
+    \item Registered the Storybook MCP server locally against my IDE's MCP configuration.
+    \item Verified that the assistant could list stories, retrieve their args/argTypes, and answer natural-language questions such as \emph{``Which stories in \lstinline|next-common| render the \lstinline|Button| in its \lstinline|disabled| state?''} without me pasting any code.
+    \item Prototyped a small workflow where I asked the assistant to draft a new story for an existing component; because the MCP server exposes the argTypes of the component, the generated story was consistent with the actual component API rather than hallucinated.
+\end{itemize}
+
+\textbf{Observations:}
+
+\begin{itemize}
+    \item The MCP server is a genuine productivity multiplier for teams that already maintain a rich Storybook. It effectively turns the story catalog into a queryable knowledge base for AI assistants.
+    \item Because it exposes structured story metadata rather than raw source code, it is a safer surface to grant an assistant than blanket repository access.
+    \item Adoption inside the team will require a short internal guide, which I drafted and included in the PR description so reviewers could try it locally.
+\end{itemize}
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~5 \vspace{2cm}}}
+    \caption{AI assistant querying the Storybook MCP server to list \texttt{Button} stories.}
+    \label{fig:x5-mcp}
+\end{figure}
+
+\subsection{Task 3 --- Adding the Storybook Performance Panel Addon}
+\label{sec:task3-perf-panel}
+
+\subsubsection{Motivation}
+
+Performance regressions are notoriously hard to catch during code review. A component that renders in 40\,ms today may quietly grow to 200\,ms after a few refactors, because reviewers cannot easily observe render behavior from a diff. Once the regression lands, it becomes an incident-driven investigation.
+
+The \textbf{Performance Panel} addon (\href{https://github.com/github/storybook-addon-performance-panel}{\lstinline|@github-ui/storybook-addon-performance-panel|}) directly addresses this gap. It surfaces a live dashboard inside Storybook --- visible as a \textbf{Performance} panel next to Controls and Actions --- that displays render timings, re-render counts and other performance signals for the currently viewed story. Because every reusable component in \lstinline|next-common| has at least one story, wiring the addon in gives us performance visibility everywhere, for free.
+
+\subsubsection{Integration steps}
+
+The integration was deliberately kept minimal and reversible.
+
+\begin{enumerate}
+    \item \textbf{Install the dependency.} Added \lstinline|@github-ui/storybook-addon-performance-panel| as a \lstinline|devDependency| in the Storybook workspace of \lstinline|next-common|, then ran \lstinline|pnpm install| to update the lockfile. Because this depends on Storybook 10, it could only be added \emph{after} Task 2 was merged --- which is why Task 2 had to come first in the timeline.
+    \item \textbf{Register the addon in the manager.} Added the addon package name to the \lstinline|addons| array in \lstinline|.storybook/main.ts|, respecting the order convention (essential addons first, developer-experience addons after).
+    \item \textbf{Compose the decorator in preview.} Imported the addon's decorator in \lstinline|.storybook/preview.ts| and appended it to the global \lstinline|decorators| array so it wraps every story without any per-story change.
+    \item \textbf{Validate on a representative story.} Verified that the \textbf{Performance} panel appears in the Storybook toolbar and that switching between stories updates the metrics live. I validated this on a heavy, representative story (a data-dense product card grid) rather than a trivial one, because the addon's value shows most clearly on non-trivial trees.
+\end{enumerate}
+
+The full integration was under 15 lines of code.
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~6 \vspace{2cm}}}
+    \caption{The Performance panel visible in the Storybook UI for the \texttt{ProductCardGrid} story.}
+    \label{fig:x6-perf-panel}
+\end{figure}
+
+\subsubsection{Acceptance criteria --- verification}
+
+\begin{itemize}
+    \item \lstinline|@github-ui/storybook-addon-performance-panel| is added as a dependency in \lstinline|next-common| Storybook. \textbf{Verified.}
+    \item Addon is registered in \lstinline|.storybook/main.ts|. \textbf{Verified.}
+    \item Addon decorator is composed in \lstinline|.storybook/preview.ts|. \textbf{Verified.}
+    \item Storybook shows a \textbf{Performance} panel when viewing stories. \textbf{Verified} on Chrome and Edge (the browsers the addon documentation recommends for the full metric set).
+    \item At least one representative story is validated with the panel working. \textbf{Verified} on \lstinline|ProductCardGrid| and confirmed on two additional stories to make sure the wiring was not story-specific.
+\end{itemize}
+
+\subsubsection{Recommended usage}
+
+I also added a short ``How to read the Performance panel'' note to the internal Storybook docs page, so contributors know:
+
+\begin{itemize}
+    \item Which metrics are meaningful for our stack (mount time, re-render count under prop churn).
+    \item Which are noisy in a Storybook context and should not be treated as absolute (initial paint on a cold dev server).
+    \item How to compare two branches by opening two Storybook tabs side by side.
+\end{itemize}
+
+\subsection{Cross-Cutting Challenges and How I Handled Them}
+
+Beyond the per-task issues already documented, three cross-cutting challenges shaped how I approached the work:
+
+\begin{itemize}
+    \item \textbf{Coordinating three interdependent tickets.} Task 3 depends on Task 2, and Task 2 is significantly easier on Task 1's toolchain. I sequenced the PRs accordingly and kept them small enough to be reviewed independently, instead of bundling everything into a single unreviewable diff.
+    \item \textbf{Not breaking downstream consumers.} \lstinline|next-common| is consumed by other repositories. I audited its public exports before and after each upgrade and confirmed that no public API surface changed, so downstream consumers only had to bump the version.
+    \item \textbf{Documenting for future contributors.} Every non-trivial migration step (MDX 3 strictness, \lstinline|essentials| split, \lstinline|packageManager| field, Docker base image change) was written down in the PR description and in the repository's \lstinline|CONTRIBUTING.md|. The goal was to make the next Storybook or Node upgrade cheaper than this one.
+\end{itemize}
+
+\begin{figure}[h]
+    \centering
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~7 \vspace{2cm}}}
+    \caption{PR overview showing the three sequential pull requests and their green CI status.}
+    \label{fig:x7-prs}
+\end{figure}
+
+\subsection{Results and Impact}
+
+The combined outcome of the three tasks:
+
+\begin{itemize}
+    \item \textbf{Modern runtime.} \lstinline|next-common| now runs on Node 24 (Active LTS) and pnpm 10, consistent with the rest of the organization's repositories. CI images are rebuilt on the same baseline.
+    \item \textbf{Modern component workshop.} Storybook 10 is live, with a faster dev server, cleaner configuration, an audited addon set, and no addon left behind.
+    \item \textbf{New AI-assisted workflow surface.} Through the Storybook MCP server, AI assistants can now reason about \lstinline|next-common| stories in a structured way, which is a genuine change in how the library can be consumed and extended.
+    \item \textbf{Continuous performance visibility.} Every developer opening any story in \lstinline|next-common| now sees a Performance panel by default, turning performance from an occasional audit into an ambient signal.
+\end{itemize}
+
+Together, these three changes shift \lstinline|next-common| from a \emph{maintenance-friction} posture to an \emph{actively improving} posture --- which is precisely the theme of the branch this work targeted (\lstinline|release/always-improve-always-advance|).
+
+\subsection{Lessons Learned}
+
+Reflecting on the internship work in this chapter, the main technical and methodological takeaways are:
+
+\begin{itemize}
+    \item \textbf{Sequence upgrades so that each unlocks the next.} Attempting the Storybook upgrade before the Node/pnpm upgrade would have wasted effort --- many v10 dependencies simply refuse to install on old runtimes. Ordering matters.
+    \item \textbf{Prefer small, reviewable PRs on shared libraries.} A shared library is a high-leverage artifact; a broken commit has organization-wide blast radius. Splitting the work into three PRs made reviews faster and rollbacks safer.
+    \item \textbf{Codemods are a starting point, not a substitute for reading the migration guide.} Storybook's codemod handled roughly 80\% of the mechanical work, but the remaining 20\% --- the parts that matter --- required reading the official guide and understanding the \emph{intent} behind each breaking change.
+    \item \textbf{New protocol surfaces (MCP) are worth exploring early.} The Storybook MCP server is not yet mainstream, but adopting it early gave me a concrete view of how AI-assisted workflows can be grounded in real project metadata rather than raw source-code scraping.
+    \item \textbf{Developer-experience tooling deserves the same rigor as production code.} The Performance Panel addon integration is only 15 lines of code, but choosing the right addon, validating it on a representative story, and documenting how to read its output is what turns those 15 lines into an actual team-level improvement.
+\end{itemize}
+
+\subsection{Conclusion}
+
+This chapter documented three interconnected improvements to \lstinline|next-common|: a runtime upgrade to Node 24 and pnpm 10, a Storybook upgrade to v10 with an exploration of its new MCP server, and the addition of the Storybook Performance Panel addon. Each task was small enough to ship independently, but together they constitute a coherent modernization of the front-end platform used across the organization.
+
+The work aligned squarely with the branch it targeted --- \lstinline|release/always-improve-always-advance| --- and left \lstinline|next-common| on a foundation that is faster to iterate on, safer to maintain, and more open to AI-assisted development workflows for the teams that will inherit it.
 
 \clearpage
