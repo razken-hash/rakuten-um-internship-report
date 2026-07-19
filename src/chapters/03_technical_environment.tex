@@ -1,17 +1,21 @@
 \chapter{Technical Environment}
 
-The frontend development ecosystem at Rakuten France is based on a modern and robust technology stack designed to support the requirements of a large-scale e-commerce platform. This ecosystem prioritizes scalability, maintainability, performance and developer productivity with collaboration between distributed teams. This ensures a reliable development workflow from implementation and testing to deployment and maintenance.
+The chapter is divided into three main parts. The first part introduces the tools and technologies used throughout the software development lifecycle. The second part presents the frontend application architecture, highlighting the shared foundations and the different business-oriented applications developed at Rakuten France. Finally, the last part describes the deployment environments used to deliver applications from development to production.
 
-\begin{figure}[H]
+\section{Technology Stack and Development Ecosystem}
+
+The frontend development ecosystem at Rakuten France is based on a modern and robust technology stack designed to support the requirements of a large-scale e-commerce platform. This ecosystem prioritizes scalability, maintainability, performance and productivity with collaboration between distributed teams. This ensures a reliable development workflow from implementation and testing to deployment and maintenance.
+
+Figure~\ref{fig:rakuten-technical-ecosystem} illustrates the technical environment used by the frontend teams at Rakuten France, highlighting the key tools, frameworks, and practices that contribute to a streamlined development process.
+
+\begin{figure}[ht]
     \centering
     \includegraphics[width=\textwidth]{../assets/tools/rakuten_technical_environment.png}
     \caption{Rakuten France frontend technical ecosystem.}
     \label{fig:rakuten-technical-ecosystem}
 \end{figure}
 
-Figure~\ref{fig:rakuten-technical-ecosystem} illustrates the technical environment used by the frontend teams at Rakuten France, highlighting the key tools, frameworks, and practices that contribute to a streamlined development process.
-
-\section{Development Languages and Frameworks}
+\subsection{Development Languages and Frameworks}
 
 The frontend applications are primarily developed using \textbf{\acs{HTML}}, \textbf{\acs{CSS}}, and \textbf{\acs{TS}}, which constitute the foundation of modern web development. \ac{TS} is preferred for its strong typing capabilities, improving code reliability, maintainability, and developer experience.
 
@@ -25,23 +29,23 @@ Dependency management is handled through \textbf{pnpm}, a fast and disk-efficien
 
 To organize the codebase, Rakuten France adopts a \textbf{monorepo} architecture managed with \textbf{Nx} and \textbf{Lerna}. This approach enables multiple frontend packages and shared components to coexist within a single repository, promoting code reuse, consistency, and simplified dependency management across features teams.
 
-\section{Testing and Quality Assurance}
+\subsection{Testing and Quality Assurance}
 
 Maintaining high software quality is an essential aspect of the development process at Rakuten France. Several tools are integrated into the development workflow to ensure code quality, consistency, and application reliability.
 
-\subsection{Code Quality}
+\subsubsection{Code Quality}
 
 \textbf{ESLint} is used to enforce coding standards and detect potential programming warnings and errors during development, while \textbf{Prettier} automatically formats source code according to predefined style guidelines. Together, these tools contribute to a clean, readable, and maintainable codebase.
 
-\subsection{End-to-End Testing}
+\subsubsection{End-to-End Testing}
 
 End-to-end testing is performed using both \textbf{Playwright} and \textbf{Cypress}, allowing developers to validate application behavior across different browsers and user interaction scenarios. These testing frameworks help identify regressions and ensure that critical business functionalities operate correctly before deployment.
 
-\subsection{Component Development}
+\subsubsection{Component Development}
 
 For component-driven development, \textbf{Storybook} is employed to develop, test, and document user interface components in isolation. This methodology encourages component reusability, simplifies \acs{UI} testing, and improves collaboration between developers and designers.
 
-\section{Collaboration and Development Workflow}
+\subsection{Collaboration and Development Workflow}
 
 Efficient collaboration is achieved through the use of \textbf{Git} as the distributed version control system. Git enables developers to work independently on different features while maintaining a complete history of code changes.
 
@@ -49,7 +53,7 @@ Source code hosting and project collaboration are managed through \textbf{GitHub
 
 For browser-based development, testing, and debugging, \textbf{Chromium} is primarily used to verify application compatibility with modern web standards and to analyze application behavior during development.
 
-\section{DevOps and Infrastructure}
+\subsection{DevOps and Infrastructure}
 
 To ensure reliable deployment, scalability, and monitoring of applications, Rakuten France relies on a set of DevOps tools and practices. These technologies automate development workflows, facilitate application delivery, and provide observability capabilities throughout the software lifecycle.
 
@@ -65,17 +69,17 @@ Application monitoring and observability are supported through several dedicated
 
 Finally, \textbf{Consul} is used for service discovery and configuration management. It enables communication between distributed services by providing service registration, health checking, and dynamic service discovery capabilities.
 
-\section{Development Environment}
+\subsection{Development Environment}
 
 The primary \ac{IDE} adopted by the frontend teams is \textbf{Cursor}. Built upon \acf{VSCode}, Cursor provides a lightweight and highly customizable coding environment enriched with modern development features. Its extensive extension ecosystem, integrated debugging capabilities, and \acs{AI}-assisted functionalities significantly enhance developer productivity and streamline the software development process.
 
-\section{Documentation and Project Management}
+\subsection{Documentation and Project Management}
 
 Documentation and project management are essential aspects of the development workflow at Rakuten France. \textbf{Notion} is used as a collaborative workspace for organizing technical documentation, managing tasks, and centralizing project-related information. It provides a unified platform where teams can create and maintain technical specifications, development guidelines, meeting notes, and knowledge bases.
 
 Notion is also used for ticket management, allowing teams to track tasks, monitor progress, and maintain visibility over ongoing development activities. This approach facilitates knowledge sharing, improves team organization, and ensures that important project information remains accessible to all stakeholders.
 
-\section{Communication}
+\subsection{Communication}
 
 Effective communication between distributed teams is supported through several collaboration tools. \textbf{Slack} is used as the primary instant messaging platform, enabling real-time discussions, team coordination, and quick information sharing between developers and other stakeholders.
 
@@ -83,10 +87,48 @@ Effective communication between distributed teams is supported through several c
 
 For online meetings and remote collaboration, \textbf{Zoom} is used to conduct virtual meetings, technical discussions, and team sessions. It provides reliable communication capabilities for distributed teams working across different locations.
 
-\section{Artificial Intelligence Assistance}
+\subsection{Artificial Intelligence Assistance}
 
 \acf{AI} has become an integral part of the software development workflow at Rakuten France. Developers leverage \acs{AI}-powered tools to automate repetitive tasks, accelerate development, and improve code quality.
 
 \textbf{Rakuten AI} is an internal \acs{AI} assistant designed to support software engineers in tasks such as code generation, documentation writing, code review, and technical assistance. By providing context-aware recommendations, it helps developers increase productivity while maintaining coding standards.
 
 In addition, \textbf{Claude}, integrated directly into Cursor, assists developers through intelligent code completion, code explanation, refactoring suggestions, and documentation generation. The integration of \acs{AI} into the development environment reduces development time, facilitates knowledge sharing, and contributes to the overall quality and maintainability of software products.
+
+\section{Frontend applications architecture}
+
+\lstinline|next-common| is the shared front-end foundation used across every \texttt{-fo} application at Rakuten France. It provides a common set of reusable React components, custom hooks, design tokens, utilities, and development tooling that are distributed as versioned npm packages. By centralizing shared functionality, \lstinline|next-common| ensures consistency in user experience, simplifies maintenance, and accelerates feature development across the frontend ecosystem.
+
+The platform is consumed by several business-oriented applications:
+\begin{itemize}
+    \item \lstinline|buy-fo|: the frontend dedicated to buyers, responsible for managing the purchasing workflow, payment process, and money transfers.
+    \item \lstinline|c2c-fo|: the customer-to-customer marketplace frontend, enabling individuals to list, browse, buy, and sell second-hand products.
+    \item \lstinline|b2c-fo|: the business-to-customer marketplace frontend, allowing professional merchants to manage and sell products directly to consumers.
+    \item \lstinline|rfn-fo|: the frontend for the Rakuten Fulfillment Network (RFN), providing operational interfaces for fulfillment and logistics management.
+    \item \lstinline|vis-fo|: the frontend dedicated to visual merchandising and storefront presentation, offering tools to manage the visual display of products and promotional content.
+\end{itemize}
+
+Alongside the Next.js-based ecosystem, Rakuten France also maintains a Hypernova-based frontend architecture. Similar to \lstinline|next-common|, \lstinline|hypernova-next-common| provides a shared library of reusable components, utilities, and common services for Hypernova applications. It serves as the common foundation for applications built on the Hypernova framework.
+
+One of the primary consumers of this shared library is \lstinline|hypernova-vis-fo|, the Hypernova implementation of the visual merchandising frontend, which relies on \lstinline|hypernova-next-common| to ensure consistency, code reuse, and maintainability across the Hypernova ecosystem.
+
+\section{Deployment Environments}
+
+All frontend applications are deployed on a single \ac{K8S} cluster managed by the Infrastructure team. Each application is packaged as a Docker image and deployed across several isolated environments. This approach allows features to be developed, tested, validated, and progressively released while sharing the same underlying \ac{K8S} infrastructure.
+
+The deployment pipeline consists of four environments:
+
+\begin{itemize}
+    \item \textbf{Development (Dev):} This environment is used by frontend engineers during feature implementation and integration. Multiple development namespaces (e.g., \texttt{dev8} and \texttt{dev9}) are available, enabling different teams or feature branches to deploy their work independently without interfering with each other.
+
+    \item \textbf{\acf{QA}:} The \ac{QA} environment is dedicated to functional, regression, and integration testing before release. It consists of several isolated namespaces (\texttt{qa1} to \texttt{qa8}), allowing multiple application versions to be tested simultaneously by \ac{QA} engineers and other stakeholders.
+
+    \item \textbf{Preview:} The preview environment is used to validate new features and changes before their integration into the main codebase. It provides developers and reviewers with an environment close to production, making it possible to verify the behavior of a change before its official release.
+
+    \item \textbf{Production (Prod):} The production environment hosts the live applications used by Rakuten France customers. Deployments to this environment are performed after successful validation in previous stages to ensure application stability, reliability, and minimal service disruption.
+\end{itemize}
+
+Each environment maintains the three most recent deployment versions, allowing rollback operations when necessary. Once a new deployment exceeds this limit, the oldest version is automatically removed and can no longer be restored.
+
+This multi-environment deployment strategy facilitates parallel development, comprehensive testing, collaborative validation, and controlled production releases while leveraging a centralized Kubernetes cluster managed by the Infrastructure team.
+
