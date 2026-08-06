@@ -1,469 +1,414 @@
-\section{Dark Mode Implementation --- \texorpdfstring{\lstinline|next-common|}{next-common}}
+\section{Dark Mode Implementation}
 \label{sec:dark-mode}
 
 \subsection{Context}
 
-\lstinline|next-common| is the shared front-end foundation used across every app-fo at Rakuten France. It ships common React components, hooks, design tokens and tooling that downstream apps consume as versioned npm packages.
+Many users today configure their \acf{OS} and browsers to use dark mode by default, making dark interfaces an increasingly expected feature in modern applications. This trend is particularly noticeable among younger user segments, including the Rakuten France 2026's \acf{OKRs} growth target, where dark UI experiences are often preferred.
 
-This ticket is an \textbf{introductory task}: it forces the assignee to touch every corner of the monorepo --- theme, tokens, components, SSR, Storybook, build pipeline --- and to interact with every downstream consumer.
+To address these expectations, this task focuses on introducing dark mode support across the frontend ecosystem.
 
-\textbf{Motivation:}
+The first step consists of extending \texttt{next-common} to provide the required dark mode foundation, including theme management, design token adaptation, and component compatibility. Once this shared foundation is available, dark mode is progressively integrated into the different consuming \texttt{*-fo} applications.
+
+As an introductory task within the frontend platform, this work requires interaction with multiple parts of the monorepo ecosystem, including themes, design tokens, reusable components, Storybook, build pipelines, and downstream application integration.
+
+\subsection{Phase 01: Research \& Technical Planning}
+
+\subsubsection{Dark Mode Definition, Importance, and Challenges}
+
+\paragraph{Definition:}
+
+Dark mode is a user interface theme that replaces traditional light backgrounds with darker color palettes while adapting text, components, and visual elements to maintain readability and accessibility.
+
+\paragraph{Importance:}
+
+The adoption of dark mode has become an important aspect of modern \acs{UX} for several reasons:
+
 \begin{itemize}
-    \item Many users already run their OS/browser in dark mode by default.
-    \item Younger cohorts (the KRS growth target) actively prefer dark UI.
-    \item It brings the platform in line with peer e-commerce sites and modern UX standards.
+    \item \textbf{User preferences:} Many users configure their \acs{OS} and browsers to use dark mode by default, expecting applications to automatically adapt to their system preferences.
+
+    \item \textbf{Improved \acs{UX}:} Dark interfaces provide a more comfortable viewing experience, particularly in low-light environments, and can help reduce visual discomfort during prolonged usage.
+
+    \item \textbf{Modern \acs{UX} standards:} Supporting dark mode enables applications to meet current design expectations and provide a consistent experience across modern platforms, including e-commerce applications.
+
+    \item \textbf{Energy efficiency:} Dark mode can reduce power consumption on OLED and AMOLED displays, as darker pixels require less energy to illuminate.
 \end{itemize}
 
-\subsection{Phase 01 --- Research \& Technical Planning}
+\paragraph{Challenges:}
 
-\subsubsection{What is dark mode / why does it matter}
-
+Though, it's important to adapt dark mode across a large-scale frontend ecosystem, the process presents several technical challenges:
 \begin{itemize}
-    \item OS-level and browser-level color scheme preferences that flip UI palettes from light to dark.
-    \item Detectable in CSS via \lstinline|prefers-color-scheme: dark| and in JS via \lstinline|window.matchMedia('(prefers-color-scheme: dark)')|.
-    \item E-commerce specifics: product images shot on white backgrounds, price/CTA contrast, brand red on dark surfaces, seller trust signals (badges, ratings) must remain legible.
+    \item \textbf{State management in a micro-frontend architecture:} Maintaining a consistent theme state across multiple independent frontend applications requires a shared approach to theme detection, synchronization, and persistence.
+    
+    \item \textbf{Image adaptation:} Many e-commerce product images are designed with light backgrounds. Ensuring proper visibility and contrast on dark surfaces requires careful handling of images, backgrounds, and visual assets.
+    
+    \item \textbf{Component and design consistency:} All shared components, design tokens, and UI elements must support both themes while preserving accessibility, readability, and visual consistency across applications.
 \end{itemize}
 
 \subsubsection{Technical decisions}
 
-\begin{table}[h]
-    \centering
-    \caption{Technical decisions for the dark mode implementation}
-    \label{tab:dark-mode-decisions}
-    \begin{tabular}{@{}p{2.4cm}p{3.6cm}p{4.4cm}p{3.6cm}@{}}
-        \toprule
-        \textbf{Concern} & \textbf{Options considered} & \textbf{Choice on this branch} & \textbf{Where it lives} \\
-        \midrule
-        State management & React Context, Zustand, Redux & \textbf{React Context} (\lstinline|AppThemeContext|) --- no need for a store, theme is a single boolean-ish value & \lstinline|packages/mui/src/components/| \lstinline|ThemeContextProvider/themeContext.ts| \\
-        CSS strategy & \lstinline|.dark-mode| class, MUI-only, \lstinline|:root[data-theme]| & \textbf{\lstinline|:root[data-theme='dark'|dark|'light']|} --- one selector drives both raw CSS and MUI & \lstinline|packages/global-css/src/styles/palettes/*.css| \\
-        Persistence & sessionStorage, cookie, localStorage & \textbf{\lstinline|localStorage|} key \lstinline|"theme"| --- survives reloads, no server round-trip & \lstinline|ThemeContextProvider| + \lstinline|ThemeInitScript| \\
-        MUI $\leftrightarrow$ CSS-vars sync & Duplicate palette in JS, MUI v7 CssVarsProvider, JS tokens $\to$ CSS vars & \textbf{JS tokens re-declared as \lstinline|var(--*)| references + \lstinline|cssVariables: true| in \lstinline|createTheme|} so both worlds resolve to the same CSS variables & \lstinline|packages/global-css/src/colorPalette.ts| + \lstinline|packages/mui/src/theme.tsx| \\
-        FOUC (Flash of Unstyled Content) & CSS-only, cookie SSR, inline head script & \textbf{Inline \lstinline|<ThemeInitScript />|} injected before hydration in \lstinline|CommonHead| (Pages Router) and in \lstinline|CommonScripts| (App Router) & \lstinline|packages/mui/src/components/| \lstinline|ThemeContextProvider/ThemeInitScript.tsx| \\
-        SSR / hydration & --- & \lstinline|data-theme| set synchronously in \lstinline|<head>| before React mounts, so first paint already matches user preference & \lstinline|CommonHead.tsx|, \lstinline|CommonScripts.tsx| \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\subsubsection{The critical piece --- sync MUI theme with global CSS variables}
-
-The codebase mixes \textbf{MUI \lstinline|sx| / \lstinline|styled|} and \textbf{plain CSS modules}. To keep them in sync we run a single source of truth (CSS variables) and let both worlds resolve to it.
-
-\textbf{Algorithm}
-
 \begin{enumerate}
-    \item \lstinline|global-css| declares two palettes as CSS custom properties, scoped by \lstinline|:root[data-theme]|.
-    \item \lstinline|global-css/colorPalette.ts| re-exports JS tokens whose value is \lstinline|'var(--red-800)'|, \lstinline|'var(--gray-100)'|, etc. --- \textbf{not} hex.
-    \item \lstinline|packages/mui/src/theme.tsx| builds the MUI theme with \lstinline|cssVariables: true| (new in MUI v7) and feeds \lstinline|palette.mode| from the runtime.
-    \item \lstinline|ThemeContextProvider| toggles \lstinline|document.documentElement.dataset.theme| --- this flips the CSS variables globally, which in turn re-tints every MUI component and every CSS module simultaneously.
+    \item \textbf{State management:}
+    \begin{itemize}
+        \item \textbf{Options considered:} React Context, Zustand, Redux.
+        \item \textbf{Choice:} \textbf{React Context} with \texttt{AppThemeContext} to manage the theme state, as the application only requires a simple global theme value.
+    \end{itemize}
+
+    \item \textbf{CSS strategy:}
+    \begin{itemize}
+        \item \textbf{Options considered:} \texttt{.dark-mode} class, \texttt{data-theme} attribute, MUI-only styling.
+        \item \textbf{Choice:} The \texttt{data-theme} \acs{HTML} attribute, providing a centralized and flexible way to control themes through \acs{JS} \acs{DOM} manipulation.
+    \end{itemize}
+
+    \item \textbf{Persistence:}
+    \begin{itemize}
+        \item \textbf{Options considered:} sessionStorage, localStorage, cookies.
+        \item \textbf{Choice:} \textbf{\texttt{localStorage}} with the \texttt{theme} key storing \texttt{light} or \texttt{dark}, ensuring the user's preference is preserved across sessions without server-side storage.
+    \end{itemize}
+
+    \item \textbf{MUI and CSS variables synchronization:}
+    \begin{itemize}
+        \item \textbf{Options considered:} Duplicated palettes, MUI v7 CssVarsProvider, CSS variable-based JS tokens.
+        \item \textbf{Choice:} \ac{JS} tokens are mapped to CSS variables using \texttt{var(- -*)} references with \texttt{cssVariables: true} in \texttt{createTheme} of \texttt{CssVarsProvider}, ensuring consistency between MUI components and global styles.
+    \end{itemize}
+
+    \item \textbf{SSR and hydration:}
+    \begin{itemize}
+        \item \textbf{Choice:} The \texttt{data-theme} attribute is applied inside the \texttt{<html>} tag before React hydration, ensuring that the initial render matches the user's preferred theme and preventing visual inconsistencies.
+    \end{itemize}
 \end{enumerate}
 
-\begin{lstlisting}[caption={packages/global-css/src/styles/palettes/custom-light-variables.css}]
-:root,
-:root[data-theme='light'],
+\subsubsection{Syncing MUI theme with global CSS variables}
+
+The codebase mixes \textbf{MUI \lstinline|sx| / \lstinline|styled|} and \textbf{plain CSS modules} components. To keep them in sync we set a single source of truth (CSS variables) and let both worlds resolve to it, here is the steps to do so:
+
+\begin{enumerate}
+    \item Define separate light and dark CSS palettes through global CSS variables, using the \texttt{data-theme} attribute as a selector: \texttt{:root[data-theme='light']} for the light mode and \texttt{:root[data-theme='dark']} for the dark mode.
+    \item Redefine JS color tokens to reference the CSS variables using \texttt{var(--*)}, ensuring that both MUI components and CSS modules resolve to the same color values.
+    \item Implement the MUI theme using \texttt{CssVarsProvider} with \texttt{cssVariables: true} (new in MUI v7) and feeds \texttt{palette.mode} from the runtime.
+    \item \texttt{ThemeContextProvider} toggles \texttt{document.documentElement.dataset.theme} between 'light' and 'dark', which flips the CSS variables globally, which in turn re-tints every MUI component and every CSS module simultaneously.
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}[t]{0.48\textwidth}
+        \begin{lstlisting}[caption={custom-light-variables.css}]
+:root, :root[data-theme="light"],
 .light-mode {
-  --palette-mode: 'light';
-  --inverse-mode: 'dark';
+  --palette-mode: "light";
+  --inverse-mode: "dark";
 
-  --rakuten-logo: var(--red-800);
-  --merchant-center-logo: '#4D4D4D';
+  --white-900: "#FFFFFF";
+  --black-900: "#000000";
 }
-\end{lstlisting}
-
-\begin{lstlisting}[caption={packages/global-css/src/colorPalette.ts}]
+        \end{lstlisting}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\textwidth}
+        \begin{lstlisting}[caption={custom-dark-variables.css}]
+:root[data-theme="dark"],
+.dark-mode {
+  --palette-mode: "dark";
+  --inverse-mode: "light";
+  
+  --white-900: "#000000";
+  --black-900: "#FFFFFF";
+}
+        \end{lstlisting}
+    \end{minipage}
+\label{fig:css-variables-palettes}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \begin{minipage}[t]{0.24\textwidth}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\textwidth}
+        \begin{lstlisting}[caption={colorPalette.ts}]
 export const colorPalette = {
-  mode: 'var(--mode)',
-  reverseMode: 'var(--inverse-mode)',
+  paletteMode: 'var(--palette-mode)',
+  inverseMode: 'var(--inverse-mode)',
 
-  white: 'var(--white)',
-  gray100: 'var(--gray-100)',
-  // ...
-  red800: 'var(--red-800)',
-  rakutenLogoColor: 'var(--rakuten-logo)',
-  merchantCenterLogo: 'var(--merchant-center-logo)',
+  white900: 'var(--white-900)',
+  black900: 'var(--black-900)',
 };
-\end{lstlisting}
+        \end{lstlisting}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.24\textwidth}
+    \end{minipage}
+\label{fig:color-palette}
+\end{figure}
 
-\subsubsection{Fighting the Flash Of Unstyled Content}
+\subsubsection{Resolving the Flash Of Unstyled Content Problems}
 
-Without pre-hydration work, the browser paints the default (light) palette first, then React swaps to dark 200--800\,ms later. Solution: a \textbf{synchronous inline script} that sets \lstinline|data-theme| before the CSS parses.
+One of the main challenges when implementing dark mode in \acs{SSR}-based applications is preventing the Flash Of Unstyled Content (FOUC). Without a pre-hydration mechanism, the browser initially renders the default light theme before React hydrates the page and applies the user's preferred dark theme, resulting in a noticeable visual flash. To address this issue, a \textbf{synchronous inline script} is injected in the document \texttt{<head>} to set the \texttt{data-theme} attribute before the CSS is parsed and before the page is rendered, ensuring that the correct theme is applied from the first paint.
 
-\begin{lstlisting}[caption={packages/mui/src/components/ThemeContextProvider/ThemeInitScript.tsx}]
+\begin{figure}[h]
+\centering
+\begin{lstlisting}[caption={ThemeInitScript.tsx}]
 'use client';
-
 import React from 'react';
-
-export function ThemeInitScript() {
-  return (
-    <script
-      id="theme-init"
-      dangerouslySetInnerHTML={{
-        __html: `
-          document.documentElement.dataset.theme =
-            localStorage.getItem("theme") ||
-            (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-        `,
-      }}
-    />
-  );
-}
+export const ThemeInitScript = () => (
+  <script id="theme-init"
+    dangerouslySetInnerHTML={{
+      __html: ` document.documentElement.dataset.theme =
+          localStorage.getItem("theme") ||
+          (window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark" : "light"); `, }} /> );
 \end{lstlisting}
+\label{fig:theme-init-script}
+\end{figure}
+
+\subsubsection{POC Implementation with MUI 5 and MUI 7}
+
+A small POC was implemented to validate the dark mode technical approach across MUI v5 and MUI v7. The main findings are:
 
 \begin{itemize}
-    \item \textbf{Pages Router}: injected in \lstinline|CommonHead| (which is used by both \lstinline|_document| and \lstinline|_documentEmotionCache|).
-    $\to$ commit \lstinline|1bde5fcfed| \emph{``fix(theme-init): Injected ThemeInitScript in CommonHead rather than \_document so it gets injected in both \_document \& \_documentEmotionCache''}.
-    \item \textbf{App Router}: injected in \lstinline|CommonScripts|.
+    \item \textbf{MUI v5:} Does not provide native CSS Variables support, requiring a custom solution to synchronize \ac{JS} themes with \acs{CSS} variables.
+    
+    \item \textbf{MUI v7:} Introduces built-in \texttt{cssVariables: true} support in \texttt{createTheme}, simplifying theme synchronization and customization.
+    
+    \item \textbf{Migration:} The upgrade from MUI v5 to MUI v7 was included as part of the dark mode implementation.
 \end{itemize}
 
-\subsubsection{POC --- MUI v5 vs MUI v7}
+\subsection{Phase 02: Technical Implementation in \texttt{next-common}}
 
-A small POC (\lstinline|feature/poc-mui-upgrade-agent-os|) was run first to confirm:
-\begin{itemize}
-    \item v5 has \textbf{no} first-class \lstinline|cssVariables| flag $\to$ JS $\leftrightarrow$ CSS sync would require a hand-rolled \lstinline|CssVarsProvider| wrapper.
-    \item v7 exposes \lstinline|cssVariables: true| on \lstinline|createTheme|, plus a much cleaner \lstinline|variants| API to replace \lstinline|ownerState| conditionals.
-    \item v5 $\to$ v7 is a prerequisite, so the migration was folded into the same delivery.
-\end{itemize}
+\subsubsection{Migration to MUI v7}
 
-\subsection{Phase 02 --- Technical Implementation}
+The first step of the implementation was upgrading the MUI ecosystem from v5 to v7 to benefit from the native CSS variables support introduced in the latest version.
 
-\subsubsection{Upgrade to MUI v7}
-
-\textbf{Version bump} --- every \lstinline|@mui/*| package pinned to the v7 line:
-
-\begin{lstlisting}[]
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}[caption={MUI dependencies update}]
 "@mui/material":         "^7.3.8",
 "@mui/icons-material":   "^7.3.8",
 "@mui/system":           "^7.3.8",
-"@mui/lab":              "^7.0.0",
 "@mui/material-nextjs":  "^7.3.8",
 "@mui/x-date-pickers":   "^7.29.4"
-\end{lstlisting}
+        \end{lstlisting}
+    \end{minipage}
+\end{figure}
 
-\textbf{Import rules updated across the codebase} (commit \lstinline|6903d9e359| \emph{``refactor(mui): Updated theme related imports in MUI components to follow MUI V7 API''}):
-
-\begin{itemize}
-    \item Everything theme-related --- \lstinline|useTheme|, \lstinline|createTheme|, \lstinline|styled|, \lstinline|alpha|, \lstinline|Theme|, \lstinline|PaletteMode| --- moves to \lstinline|@mui/material/styles|.
-    \item Runtime components/props (\lstinline|SxProps|, \lstinline|useMediaQuery|, \lstinline|Drawer|, etc.) stay on \lstinline|@mui/material| (top-level export only, deep imports are banned).
-\end{itemize}
-
-\textbf{Breaking changes handled}
+The migration required updating theme-related imports and adapting components to the new MUI APIs. The main changes included:
 
 \begin{itemize}
-    \item \lstinline|Grid| $\to$ \lstinline|GridLegacy| (9 files: \lstinline|TextStyles.stories|, \lstinline|ToggleButtonGroup.stories|, \lstinline|Title.stories|, \lstinline|StyledModal.stories|, \lstinline|SingleForm|, \lstinline|Dropzone|, \lstinline|Dropzone.style|, \lstinline|Radio.stories|, \lstinline|LoadingScreen|).
-    \item \lstinline|ownerState| variant conditionals rewritten into the new \lstinline|variants: [{ props, style }]| array (see \lstinline|Button|, \lstinline|Radio|, \lstinline|Checkbox| in \lstinline|theme.tsx|).
-    \item \lstinline|@mui/styles| removed (deprecated in v6, gone in v7) --- from both \lstinline|@rakutenfrance/mui| and \lstinline|@rakutenfrance/nextjs-app-router|.
-    \item Deep import \lstinline|Box/Box| fixed in \lstinline|ToggleButton.stories|.
-    \item \lstinline|react-is| pinned to \lstinline|^18.3.1| in root \lstinline|pnpm.overrides| to keep MUI v7 happy on React 18 consumers.
-    \item \lstinline|x-date-pickers|: \lstinline|calendarPickerClasses|/\lstinline|calendarOrClockPickerClasses| removed, only \lstinline|pickersPopperClasses| kept.
+    \item Updating theme utilities to use \lstinline|@mui/material/styles| instead of deprecated APIs such as \lstinline|@mui/styles|.
+    \item Updating components affected by breaking changes introduced in MUI v7, such as replacing the previous \lstinline|Grid| implementation with \lstinline|GridLegacy| where required.
 \end{itemize}
 
-Full migration diary: \lstinline|MUI_V7_MIGRATION_SUMMARY.md| at the repo root and \lstinline|agent-os/specs/2026-02-16-1530-mui-v5-to-v7-upgrade/|.
+\subsubsection{Setting \textbf{global-css} as the source of truth}
 
-\subsubsection{Theme tokens --- \texorpdfstring{\lstinline|global-css|}{global-css} becomes the source of truth}
+To support dark mode consistently across the ecosystem, color definitions were moved from \ac{JS} objects to CSS variables managed by the \texttt{global-css} package.
 
-\textbf{New files} (commit \lstinline|a03deb6b7b| \emph{``feat(global-css): Added Dark and Light Palettes' Colors''}):
+Two palettes were introduced, light and dark palette presented in Figure~\ref{fig:css-variables-palettes}.
 
-\begin{lstlisting}[]
-packages/global-css/src/styles/palettes/
-|-- custom-dark-variables.css      # Rakuten-specific, dark
-|-- custom-light-variables.css     # Rakuten-specific, light
-|-- dark-palette.css               # Full gray/red/orange/... ramps, dark
-`-- light-palette.css              # Full gray/red/orange/... ramps, light
-\end{lstlisting}
+This approach allows both MUI components and CSS modules to consume the same design tokens without duplicating theme logic.
+
+The \lstinline|colorPalette.ts| file was updated to reference CSS variables names instead of static hex values as in Figure~\ref{fig:color-palette}.
+
+\subsubsection{{ThemeContextProvider}}
+
+The theme management across all consuming applications is centralized in the shared \texttt{ThemeContextProvider} inside the \texttt{next-common/mui} package.
+
+Its responsibilities are:
 
 \begin{itemize}
-    \item \lstinline|light-palette.css| binds all \lstinline|--gray-*|, \lstinline|--red-*|, \lstinline|--orange-*|, \lstinline|--overlay-*|, plus club status colors, under \lstinline|:root, :root[data-theme='light'], .light-mode|.
-    \item \lstinline|dark-palette.css| re-binds the \textbf{same} variable names to inverted values under \lstinline|:root[data-theme='dark'], .dark-mode|. Nothing else has to know which mode is active.
-    \item \lstinline|custom-*-variables.css| layer app-level tokens (\lstinline|--rakuten-logo|, \lstinline|--merchant-center-logo|, \lstinline|--palette-mode|, \lstinline|--inverse-mode|).
-    \item Both palettes are pulled in via \lstinline|styles/colors.css|, which is imported by \lstinline|index.global.css| and consumed by every app.
+    \item Detecting the user's preferred theme using system preferences.
+    \item Persisting manual selections using \lstinline|localStorage|.
+    \item Updating the global \lstinline|data-theme| attribute.
+    \item Providing the active theme palette to MUI through \texttt{ThemeProvider}.
 \end{itemize}
 
-\textbf{\texorpdfstring{\lstinline|colorPalette.ts|}{colorPalette.ts} --- JS mirror of the CSS vars}
+As a result, applications using the shared MUI provider automatically gain dark mode support, Phase 03.
 
-Previously lived in \lstinline|packages/mui/src/colorPalette.ts| with hex values. Now:
+\subsubsection{\texttt{globalTheme} with CSS variables}
 
-\begin{itemize}
-    \item Moved into \lstinline|packages/global-css/src/colorPalette.ts|.
-    \item Every value replaced with a \lstinline|var(--*)| reference --- see commit \lstinline|161dc47ba2| \emph{``feat(mui-theme): Added CSS Variables support to the Theme Color Palette''}.
-    \item \lstinline|global-css| now builds \& publishes as a real package (\lstinline|build:esm|, \lstinline|build:cjs|, \lstinline|exports|, \lstinline|main|, \lstinline|types|) instead of shipping raw source only.
-\end{itemize}
+The MUI theme configuration was updated to enable CSS variables:
 
-Result: \textbf{every downstream \lstinline|.style.ts| and \lstinline|.module.css| file automatically gains dark-mode support} as soon as they import from \lstinline|@rakutenfrance/global-css|.
-
-\subsubsection{The \texorpdfstring{\lstinline|ThemeContextProvider|}{ThemeContextProvider}}
-
-Single React Context wired into the MUI provider tree (commit \lstinline|3407a9770b| \emph{``Implemented Light/Dark Mode Support for all next-common''} + fix \lstinline|e147d96c23| \emph{``fix: persist dark mode on re-renders by syncing data-theme''}).
-
-\begin{lstlisting}[caption={packages/mui/src/components/ThemeContextProvider/ThemeContextProvider.tsx}]
-'use client';
-
-import { CssBaseline, useMediaQuery } from '@mui/material';
-import { ThemeProvider, type PaletteMode } from '@mui/material/styles';
-import React, { useEffect, useMemo, useState } from 'react';
-import { globalTheme } from '../../theme';
-import { AppThemeContext } from './themeContext';
-
-export const ThemeContextProvider: React.FC<{
-  children: React.ReactNode;
-  mode?: PaletteMode;
-}> = ({ children, mode }) => {
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-
-  const [manualMode, setManualMode] = useState<PaletteMode | null>(null);
-
-  useEffect(() => {
-    const stored =
-      (localStorage.getItem('theme') as PaletteMode | null) ||
-      (document.documentElement.dataset.theme as PaletteMode | null);
-    if (stored) setManualMode(stored);
-  }, []);
-
-  const currentMode: PaletteMode = mode ?? manualMode ?? (prefersDark ? 'dark' : 'light');
-
-  const toggleMode = () => {
-    const newMode = currentMode === 'light' ? 'dark' : 'light';
-    localStorage.setItem('theme', newMode);
-    setManualMode(newMode);
-  };
-
-  const theme = useMemo(
-    () => globalTheme(undefined, undefined, undefined, currentMode),
-    [currentMode]
-  );
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = currentMode;
-  }, [currentMode]);
-
-  const appThemeContext = useMemo(
-    () => ({ mode: currentMode, toggleMode }),
-    [currentMode]
-  );
-
-  return (
-    <AppThemeContext.Provider value={appThemeContext}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        {children}
-      </ThemeProvider>
-    </AppThemeContext.Provider>
-  );
-};
-\end{lstlisting}
-
-\begin{itemize}
-    \item Reads persisted mode after mount (no SSR mismatch --- the DOM has already been set by \lstinline|ThemeInitScript|).
-    \item Exposes \lstinline|useThemeContext()| $\to$ \lstinline|{ mode, toggleMode }| for any component that needs to render a theme toggle.
-    \item Feeds \lstinline|palette.mode| into \lstinline|globalTheme(color, htmlFontSize, pxToRem, currentMode)|.
-\end{itemize}
-
-\lstinline|MUIProvider| and \lstinline|AppRouterMUIProvider| now delegate to \lstinline|ThemeContextProvider| instead of wrapping their own \lstinline|ThemeProvider|, so every app that already uses \lstinline|MUIProvider| gets dark mode for free.
-
-\subsubsection{\texorpdfstring{\lstinline|globalTheme|}{globalTheme} --- CSS variables enabled}
-
-\begin{lstlisting}[caption={packages/mui/src/theme.tsx}]
-const theme: CustomThemeOptions = {
-  pxToRemUtils: pxToRem,
+\begin{lstlisting}
+const theme = {
   cssVariables: true,
-  typography: {
-    // ...
-  },
   palette: {
-    mode: paletteMode as PaletteMode,
-    // ...
+    mode: paletteMode,
   },
-  // ...
 };
 \end{lstlisting}
 
-\begin{itemize}
-    \item New \lstinline|_paletteMode| parameter $\to$ drives \lstinline|palette.mode|.
-    \item \lstinline|palette.mode| now passed through so MUI generates variable-based classnames (\lstinline|--mui-palette-*|).
-    \item All hardcoded palette entries replaced with \lstinline|colorPalette.*| (which are \lstinline|var(--*)|).
-    \item Text/background/action/divider filled in so v7 components (\lstinline|Alert|, \lstinline|Chip|, \lstinline|Snackbar|, \lstinline|LinearProgress|) resolve correctly in both modes.
-    \item \lstinline|Button|, \lstinline|Radio|, \lstinline|Checkbox|, etc. --- \lstinline|ownerState| conditionals migrated to the v7 \lstinline|variants| array while doing the palette rewrite.
-\end{itemize}
+All palette values were replaced with CSS variable references, allowing MUI components and custom CSS styles to automatically adapt when the active theme changes.
 
-\textbf{Known caveat} (documented in commit \lstinline|3407a9770b|): MUI's \lstinline|alpha()| helper does not work on CSS variables, so any component that needed transparency was converted to use \lstinline|--overlay-*| tokens instead.
+\textbf{Note:} Some components requiring transparency were migrated from dynamic color manipulation to predefined overlay variables, since MUI's \lstinline|alpha()| utility does not directly support CSS variables.
 
-\subsubsection{Storybook}
+\subsubsection{Storybook integration}
 
-Two decorators + a global toolbar toggle (commit \lstinline|3407a9770b| + \lstinline|e21385b506| \emph{``fix(storybook): Added CacheProvider to Preview''}).
+Storybook was updated to support theme switching through a global toolbar control.
 
-\begin{lstlisting}[caption={.storybook/decorators/story-theme-decorators.tsx}]
-import type { Decorator } from '@storybook/react';
-import { PaletteMode } from '@mui/material';
-import { ThemeContextProvider } from '@rakutenfrance/mui';
-
-export const withCssVarsTheme: Decorator = (Story, context) => {
-  const mode = context.globals.theme ?? 'dark';
-  document.documentElement.setAttribute('data-theme', mode);
-
-  return <Story {...context.args} />;
-};
-
-export const withMuiTheme: Decorator = (Story, context) => {
-  const mode = (context.globals.theme ?? 'dark') as PaletteMode;
-
-  document.documentElement.setAttribute('data-theme', mode);
-
-  return (
-    <ThemeContextProvider mode={mode}>
-      <Story {...context.args} />
-    </ThemeContextProvider>
-  );
-};
-\end{lstlisting}
+The integration includes:
 
 \begin{itemize}
-    \item \lstinline|preview.tsx| registers both decorators, adds a \lstinline|theme| globalType with a sun/moon toolbar, and now imports the raw \lstinline|@rakutenfrance/global-css/src/index.global.css| so the palettes are available in the iframe.
-    \item \lstinline|preview.css| no longer forces \lstinline|background: #fff|; it uses \lstinline|var(--white)| so it inherits the active palette.
-    \item Added \lstinline|CacheProvider| (Emotion) around every story so SSR-style class names stay stable across the toggle.
+    \item A theme selector allowing switching between light and dark modes.
+    \item Loading global CSS variables inside the Storybook environment.
+    \item Wrapping stories with the shared \texttt{ThemeContextProvider}.
 \end{itemize}
 
-\begin{figure}[h]
+\subsubsection{Header \& Footer adaptation}
+
+The shared \texttt{Header} and \texttt{Footer} components were adapted to support dark mode by replacing hardcoded colors with the new CSS variable-based design tokens. Due to the complexity of these components, additional adjustments were required to ensure proper contrast, readability, and visual consistency across both themes.
+
+The main changes included:
+\begin{itemize}
+    \item Replacing static colors with dynamic palette variables for backgrounds, texts, borders, and icons.
+    \item Updating logos and SVG assets to support theme-dependent colors.
+    \item Ensuring navigation elements, menus, links, and interactive components remain accessible in both light and dark modes.
+\end{itemize}
+
+Figures~\ref{fig:header-light} and~\ref{fig:header-dark} demonstrate the Header component in both the light and dark themes. 
+
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder screenshot \vspace{2cm}}}
-    \caption{Storybook toolbar showing Light/Dark toggle and a component rendering in both modes.}
-    \label{fig:storybook-toggle}
+    \includegraphics[width=.9\textwidth]{../assets/dark_mode/header_light.png}
+    \caption{Header component in light mode from Storybook.}
+    \label{fig:header-light}
 \end{figure}
 
-\subsubsection{Shared SVGs --- circular dependency \& Rakuten logo}
-
-Before this branch, \lstinline|@rakutenfrance/mui| exported \lstinline|colorPalette|, and \lstinline|@rakutenfrance/shared-svg| imported it. But \lstinline|mui| also depends on \lstinline|shared-svg| for icons --- so a proper build of the palette would have created a \textbf{circular dependency}.
-
-\textbf{Fix} (commit \lstinline|53d853cfd2| \emph{``refactor: resolved circular dependency between @rakutenfrance/mui \& @rakutenfrance/shared-svg packages''}):
-
-\begin{itemize}
-    \item \lstinline|colorPalette| extracted to \lstinline|@rakutenfrance/global-css|.
-    \item \lstinline|@rakutenfrance/shared-svg| now depends on \lstinline|@rakutenfrance/global-css| (leaf package, no back-edge).
-    \item All SVGs default their fill to a token: \lstinline|fill = colorPalette.gray800| (icons) or \lstinline|fill = colorPalette.rakutenLogoColor| (logos).
-    \item \lstinline|SvgImg| / \lstinline|SvgIcon| base components accept and forward \lstinline|fill|.
-\end{itemize}
-
-\textbf{Rakuten \& ClubR logos} (commit \lstinline|37c6a257c2| \emph{``fix(logos): Improve Rakuten and ClubR Logos for Dark/Light Mode''}):
-
-\begin{itemize}
-    \item \lstinline|RakutenIchiba.tsx| refactored to accept \lstinline|fill| (defaulting to \lstinline|colorPalette.rakutenLogoColor| = \lstinline|var(--rakuten-logo)|).
-    \item In light mode \lstinline|--rakuten-logo| $\to$ \lstinline|var(--red-800)| (\lstinline|#BF0000|); in dark mode it flips to \lstinline|var(--color-0)| (white).
-    \item Duplicate logo removed from \lstinline|header|; single source in \lstinline|shared-svg|.
-\end{itemize}
-
-\textbf{Merchant Center logos} (commit \lstinline|43c9acc252| \emph{``enhance(merchantCenterHeader): Added Dark/Light Mode Support to Merchant Center Header''}):
-
-\begin{itemize}
-    \item \lstinline|MerchantCenterLogo|, \lstinline|MerchantCenterLogoMobile| converted \textbf{from raster URLs to inline SVG React components} so they can respect \lstinline|--merchant-center-logo|.
-\end{itemize}
-
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder screenshot \vspace{2cm}}}
-    \caption{Rakuten Ichiba + Merchant Center logos in both modes.}
-    \label{fig:logos-both-modes}
+    \includegraphics[width=.9\textwidth]{../assets/dark_mode/header_dark.png}
+    \caption{Header component in dark mode from Storybook.}
+    \label{fig:header-dark}
 \end{figure}
 
-\subsubsection{Dark mode in Header \& Footer}
+Figures~\ref{fig:footer-light} and~\ref{fig:footer-dark} illustrate the Footer adaptation to both the light and dark themes.
 
-\textbf{Header} --- see commits \lstinline|f0a243682f|, \lstinline|37c6a257c2|, \lstinline|622bf98ac4|, \lstinline|223d1367cb|:
-
-\begin{itemize}
-    \item Every \lstinline|.style.ts| file that referenced \lstinline|colorPalette| from \lstinline|@rakutenfrance/mui| now pulls it from \lstinline|@rakutenfrance/global-css|.
-    \item Hardcoded hex in \lstinline|Highlights|, \lstinline|PreHeader Renderer|, \lstinline|Nav|, \lstinline|Menu|, \lstinline|SearchCtn|, \lstinline|PriceClub|, tooltips, etc. $\to$ replaced with CSS variables.
-    \item \lstinline|PreHeader| inline HTML string builder: \lstinline|#BF0000| $\to$ \lstinline|var(--red-800)|, \lstinline|#FFFFFF| $\to$ \lstinline|var(--white)|, chevron SVGs default to \lstinline|colorPalette.white|.
-    \item Menu categories icon color was intentionally frozen (fix \lstinline|223d1367cb|) to keep the \texteuro-sign color on Super Bons Plans consistent regardless of mode.
-    \item \lstinline|preHeader| icons re-styled to work on both backgrounds.
-\end{itemize}
-
-\begin{lstlisting}[caption={packages/header/src/PreHeader/src/Renderer/longStringValues.ts}]
-'padding:0 16px;' +
-'background-color: var(--red-800);' +
-'color:var(--white);' +
-\end{lstlisting}
-
-\textbf{Footer}:
-
-\begin{itemize}
-    \item Every \lstinline|.module.css| cleaned of trailing hardcoded colors.
-    \item \lstinline|RakutenGroupLinksLogo| swapped its \lstinline|<img src=...>| for \lstinline|<RakutenIchiba />| so the corporate logo inherits the theme.
-\end{itemize}
-
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder screenshot \vspace{2cm}}}
-    \caption{Header (with preheader + highlights + search) and Footer, both modes.}
-    \label{fig:header-footer-both-modes}
+    \includegraphics[width=.9\textwidth]{../assets/dark_mode/footer_light.png}
+    \caption{Footer component in light mode from Storybook.}
+    \label{fig:footer-light}
 \end{figure}
 
-\subsubsection{Dark mode in the rest of the shared components}
-
-Commits \lstinline|3407a9770b|, \lstinline|1864a50d8d|, \lstinline|a0d9b2febc|, \lstinline|5af5869de2|, \lstinline|1431b687bc|, \lstinline|fe9cf4e8b4|:
-
-\begin{longtable}{@{}p{4.3cm}p{9.7cm}@{}}
-    \caption{Dark-mode updates applied across shared component packages} \label{tab:shared-components} \\
-    \toprule
-    \textbf{Package} & \textbf{What changed} \\
-    \midrule
-    \endfirsthead
-    \toprule
-    \textbf{Package} & \textbf{What changed} \\
-    \midrule
-    \endhead
-    \bottomrule
-    \endfoot
-    \lstinline|mui/CustomDrawer|, \lstinline|mui/Drawer|, \lstinline|mui/DrawerLoiLemaire|, \lstinline|mui/SellerDrawer| & v7 import fix (\lstinline|Theme, styled| from \lstinline|@mui/material/styles|); backgrounds $\to$ \lstinline|colorPalette.gray100|; borders $\to$ \lstinline|colorPalette.gray200|; icons $\to$ \lstinline|colorPalette.gray700| \\
-    \lstinline|mui/Dialog|, \lstinline|mui/DialogAlert|, \lstinline|PreHeaderDialog| & v7 imports, palette tokens \\
-    \lstinline|mui/ImageGallery|, \lstinline|product-image/DesktopImageGallery| & Background $\to$ \lstinline|colorPalette.white| so it inverts in dark mode \\
-    \lstinline|mui/Stepper| & Step icon colors driven by palette variables \\
-    \lstinline|map| package (\lstinline|RakutenMap|, \lstinline|MultiplePickUpMarker|, \lstinline|PickUpSelectionPanel|, \lstinline|SearchInZone|, \lstinline|CloseButton|, etc.) & Every direct hex replaced; \lstinline|colorPalette| moved to \lstinline|@rakutenfrance/global-css| import; markers respect palette \\
-    \lstinline|eshop-header| & New responsive \lstinline|sx| (no more \lstinline|theme.breakpoints.down| closures) + palette tokens \\
-    \lstinline|merchant-center-header| & Logo swap + palette tokens for tabs/notifications/monetization \\
-    \lstinline|seller-drawer|, \lstinline|strapi|, \lstinline|product-image|, \lstinline|product-description|, \lstinline|paymentMeanDetailsModalV5|, \lstinline|tfa-settings|, \lstinline|dashboard|, \lstinline|addToCartMui|, \lstinline|advertCrewPartnerCard|, \lstinline|sponsor-ads|, \lstinline|crew-partner-modal|, \lstinline|couponClipboard|, \lstinline|crossedPrice|, \lstinline|card*|, \lstinline|carousel|, \lstinline|button|, \lstinline|alert|, \lstinline|avatarLogo|, \lstinline|savebar|, \lstinline|passwordField|, \lstinline|progress|, \lstinline|radioContainer|, \lstinline|rating|, \lstinline|switch|, \lstinline|stepper|, \lstinline|snackbar|, \lstinline|sellerLabel|, \lstinline|productState|, \lstinline|optionsMenu|, \lstinline|link|, \lstinline|label*|, \lstinline|imageGallery|, \lstinline|hyperlink|, \lstinline|helpLinkList|, \lstinline|groupedDropzone|, \lstinline|filter|, \lstinline|feedbackButton|, \lstinline|fab|, \lstinline|extensionClub|, \lstinline|dropzone|, \lstinline|datesSelector|, \lstinline|customDrawerMobile|, \lstinline|customBaseTable|, \lstinline|countryFlag|, \lstinline|copyTooltip|, \lstinline|clubRankProgress|, \lstinline|clubRCagnotte|, \lstinline|clubBalanceCard|, \lstinline|clubBalanceBar|, \lstinline|boxLink|, \lstinline|blockTypeB|, \lstinline|breadcrumb|, \lstinline|advantage|, \lstinline|actionBox| & Same recipe: import \lstinline|colorPalette| from \lstinline|@rakutenfrance/global-css|, remove forced \lstinline|#fff| / \lstinline|#000|, use \lstinline|colorPalette.white| / \lstinline|colorPalette.gray1000| \\
-\end{longtable}
-
-Forced background/foreground purge --- commit \lstinline|1431b687bc| \emph{``refactor(style): set backgroundColor to colorPalette.white''} and \lstinline|fe9cf4e8b4| \emph{``style: Updated forced white and black colors to dynamic css variables values''}.
-
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder screenshot \vspace{2cm}}}
-    \caption{Drawer + Dialog + Map + ProductCard in both modes.}
-    \label{fig:components-both-modes}
+    \includegraphics[width=.9\textwidth]{../assets/dark_mode/footer_dark.png}
+    \caption{Footer component in dark mode from Storybook.}
+    \label{fig:footer-dark}
 \end{figure}
 
-\subsubsection{Build \& release to GitHub Packages}
+\subsubsection{Circular Dependency Resolution}
+
+To provide a shared foundation for dark mode across the frontend ecosystem, the \texttt{global-css} package was transformed into a standalone package responsible for exposing both CSS variables and \ac{JS} design tokens.
+
+Previously, color tokens were defined inside the \lstinline|mui| package. However, this approach created a dependency issue because some packages, such as \lstinline|shared-svg|, needed access to the same color tokens while already being consumed by \lstinline|mui|. Moving the color palette directly to \lstinline|global-css| was necessary to avoid creating a circular dependency between packages.
+
+The dependency issue was resolved by applying the following changes:
 
 \begin{itemize}
-    \item \lstinline|@rakutenfrance/global-css| now publishes real ESM + CJS artifacts (\lstinline|dist/esm|, \lstinline|dist/cjs|, \lstinline|main|, \lstinline|types|, \lstinline|exports| entries) so downstream apps can \lstinline|import { colorPalette } from '@rakutenfrance/global-css'| without pulling raw source.
-    \item \lstinline|@rakutenfrance/nextjs|: \lstinline|@mui/styles| peer dep dropped, \lstinline|@mui/material-nextjs| upgraded to \lstinline|^7.3.8|.
-    \item \lstinline|@rakutenfrance/nextjs-app-router|: same --- \lstinline|@mui/styles| removed.
-    \item \lstinline|apps/nextjs| (POC app) had Turbopack configured with a set of stubs (\lstinline|fs-stub|, \lstinline|prom-client-stub|, \lstinline|html-context-stub|, \lstinline|empty-module|) to unblock server-only modules under Turbopack.
-    \item Released as pre-release tags: \lstinline|v14.2.0-rfr-4547.0| $\to$ \lstinline|.1| $\to$ \lstinline|.2| $\to$ \lstinline|.3| $\to$ \lstinline|.4|.
+    \item Moving \lstinline|colorPalette| from \lstinline|@rakutenfrance/mui| to \lstinline|@rakutenfrance/global-css|, making it available as a shared dependency.
+    \item Updating packages such as \lstinline|shared-svg| to consume color tokens from \lstinline|global-css| instead of depending on \lstinline|mui|.
+    \item Keeping \lstinline|global-css| as a low-level package with no dependency on UI components, preventing reverse dependencies.
 \end{itemize}
 
-\subsection{Phase 03 --- Rollout to fo-apps (next steps)}
+The package was also updated to expose compiled artifacts instead of relying on raw source files. It now provides:
 
-For each downstream app that already consumes \lstinline|@rakutenfrance/mui| + \lstinline|@rakutenfrance/header| + \lstinline|@rakutenfrance/footer|:
+\begin{itemize}
+    \item Compiled CSS files containing the light and dark theme variables.
+    \item JavaScript exports containing the CSS variable-based color tokens.
+    \item Proper package metadata (\lstinline|main|, \lstinline|types|, and \lstinline|exports|) to support consumption by downstream applications.
+\end{itemize}
+
+This new architecture establishes \lstinline|global-css| as the single source of truth for theme tokens, allowing all consuming applications and shared components to use the same color system and ensuring consistent dark mode behavior across the frontend ecosystem.
+
+\subsubsection{Adding dark mode to the rest of the ecosystem}
+
+After establishing the dark mode foundation in \lstinline|next-common|, the remaining applications and packages in the frontend ecosystem were progressively updated to consume and integrate the new theme infrastructure.
+
+The main adaptations included:
+
+\begin{itemize}
+    \item Updating \lstinline|colorPalette| imports to use \lstinline|@rakutenfrance/global-css|, ensuring that all packages consume the centralized CSS variable-based design tokens.
+    
+    \item Wrapping Next.js applications with \lstinline|ThemeContextProvider| to provide a consistent theme state management mechanism, handle user preferences, and synchronize the active theme across the application.
+    
+    \item Replacing hardcoded colors with dynamic CSS variables, allowing shared components and application-specific styles to automatically adapt to both light and dark themes.
+    
+    \item Updating visual assets such as logos, SVGs, and images to support theme-dependent rendering and maintain proper contrast and visibility in dark mode.
+\end{itemize}
+
+These changes ensure that all applications built on top of the shared frontend ecosystem benefit from a consistent dark mode experience while minimizing duplicated theme logic and maintenance overhead.
+
+\subsubsection{Testing and Quality Assurance}
+
+To validate the dark mode implementation, Storybook was used as a visual testing environment for the different packages and shared components. Each component was reviewed in both light and dark modes to ensure that the visual appearance, accessibility, and behavior remained consistent across themes.
+
+The validation process focused on:
+
+\begin{itemize}
+    \item Verifying color contrast, readability, and accessibility requirements in both themes.
+    \item Ensuring that components dynamically adapt when switching between light and dark modes.
+    \item Detecting visual inconsistencies caused by remaining hardcoded colors or unsupported assets.
+\end{itemize}
+
+\subsubsection{Building and Deployment}
+
+Once the implementation was completed and validated, the updated packages were built and published to the internal GitHub Package Registry, making the new dark mode capabilities available to downstream applications consuming the shared frontend ecosystem.
+
+Additionally, the packages were published to Chromatic to enable visual regression testing and provide an updated component documentation environment. This ensures that future changes can be automatically compared against the validated light and dark mode states.
+
+\subsection{Phase 03: Rollout to \texttt{fo-apps}}
+
+After completing the dark mode foundation in \texttt{next-common}, the next step consists of progressively integrating the new theme infrastructure into the consuming frontend applications.
+
+The objective of this phase is to ensure that all applications built on top of the shared ecosystem benefit from the same theme management mechanism, design tokens, and component compatibility without duplicating dark mode logic.
+
+\subsubsection{Application migration steps}
+
+Each downstream application consuming shared packages such as \texttt{@rakutenfrance/mui}, \texttt{@rakutenfrance/header}, and \texttt{@rakutenfrance/footer} follows the same integration process:
 
 \begin{enumerate}
-    \item \textbf{Upgrade the app to MUI v7} --- bump \lstinline|@mui/*| peers, apply the same import rules (\lstinline|Theme|, \lstinline|styled|, \lstinline|useTheme| from \lstinline|@mui/material/styles|), migrate \lstinline|Grid| $\to$ \lstinline|GridLegacy| where needed.
-    \item \textbf{Bump the \lstinline|@rakutenfrance/*| packages} to the \lstinline|14.2.0-rfr-4547.x| line.
-    \item \textbf{Fix imports} --- anywhere the app imports \lstinline|colorPalette| from \lstinline|@rakutenfrance/mui|, redirect it to \lstinline|@rakutenfrance/global-css|.
-    \item \textbf{Wrap the app} in \lstinline|MUIProvider| (Pages Router) or \lstinline|CommonProviders| / \lstinline|AppRouterMUIProvider| (App Router) --- \lstinline|ThemeContextProvider| is already inside.
-    \item \textbf{Inject \lstinline|ThemeInitScript|} --- automatic if the app uses \lstinline|CommonHead| (Pages) or \lstinline|CommonScripts| (App Router). Otherwise add it explicitly to the app's \lstinline|<head>|.
-    \item \textbf{Add the theme toggle UI} --- call \lstinline|useThemeContext()| from \lstinline|@rakutenfrance/mui| in the header/user-menu component to expose \lstinline|toggleMode|.
-    \item \textbf{Purge app-level hardcoded hex} in any local \lstinline|.style.ts| / \lstinline|.module.css| --- replace with \lstinline|colorPalette.*| or \lstinline|var(--*)|.
-    \item \textbf{QA on the dev environment} --- visual regression on Storybook + manual smoke on the app's main flows in both modes.
+    \item \textbf{Upgrade dependencies:} Applications are migrated to the compatible MUI v7 ecosystem and updated shared packages versions to consume the new dark mode capabilities.
+
+    \item \textbf{Update theme-related imports:} Existing imports are adapted to follow the MUI v7 API conventions, especially for theme utilities such as \lstinline|Theme|, \lstinline|styled|, and \lstinline|useTheme|.
+
+    \item \textbf{Integrate the shared theme provider:} Applications are wrapped with the existing \lstinline|MUIProvider| or \lstinline|AppRouterMUIProvider|, which internally uses \lstinline|ThemeContextProvider| to manage theme state, persistence, and synchronization.
+
+    \item \textbf{Initialize the theme before rendering:} The \lstinline|ThemeInitScript| is injected into the application document to ensure that the correct theme is applied before the first render and prevent FOUC issues.
+
+    \item \textbf{Expose theme switching:} Application interfaces such as headers or user menus can use \lstinline|useThemeContext()| to provide users with a theme toggle functionality.
+
+    \item \textbf{Replace application-level hardcoded colors:} Local styles and components are updated to consume the shared CSS variable-based design tokens instead of static color values.
+
+    \item \textbf{Adapt visual assets:} Images, logos, and SVG components are reviewed and updated to ensure correct visibility and contrast in both themes.
 \end{enumerate}
 
-\subsection{Follow-ups \& known caveats}
+
+\subsubsection{Application validation}
+
+After integration, each application is validated to ensure consistent behavior across themes.
+
+The validation process includes:
 
 \begin{itemize}
-    \item MUI's \lstinline|alpha()| helper is incompatible with CSS variables --- any transparency has to be pre-baked in \lstinline|--overlay-*| tokens.
-    \item Merchant Center menu icons intentionally frozen to keep Super Bons Plans euro sign colored (fix \lstinline|223d1367cb|).
-    \item Storybook currently defaults to \lstinline|light|; can be revisited to auto-follow the OS setting.
-    \item The v5 $\to$ v7 migration diary --- including third-party impact (\lstinline|@tolgee/web|, \lstinline|@mui/x-date-pickers|) --- is captured in:
-    \begin{itemize}
-        \item \lstinline|MUI_V7_MIGRATION_SUMMARY.md|
-        \item \lstinline|agent-os/specs/2026-02-16-1530-mui-v5-to-v7-upgrade/{plan,shape,standards,references,breaking-changes,test-plan}.md|
-    \end{itemize}
+    \item Checking the correct initialization of the selected theme after page refresh.
+    \item Verifying theme persistence across user sessions.
+    \item Testing main user flows in both light and dark modes.
+    \item Ensuring that application-specific components follow the shared design token system.
+\end{itemize}
+
+This rollout strategy allows applications to progressively adopt dark mode while relying on the centralized implementation provided by \texttt{next-common}, reducing duplication and ensuring a consistent user experience across the frontend ecosystem.
+
+
+\subsection{Follow-ups and known limitations}
+
+Although the dark mode foundation is fully implemented, some additional improvements and considerations remain:
+
+\begin{itemize}
+    \item \textbf{CSS variable transparency handling:} MUI's \lstinline|alpha()| utility cannot directly process CSS variables. Components requiring transparency rely on predefined overlay tokens instead.
+
+    \item \textbf{Asset-specific adaptations:} Some visual assets may require dedicated handling when their original design does not support both themes.
+
+    \item \textbf{Progressive adoption:} Existing applications must migrate progressively by updating dependencies, replacing hardcoded colors, and integrating the shared theme provider.
+
+    \item \textbf{Visual regression monitoring:} Storybook and Chromatic remain the main tools for detecting visual regressions and ensuring theme consistency during future developments.
 \end{itemize}
 
 \clearpage
