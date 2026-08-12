@@ -68,132 +68,147 @@ The Docker image used by the CI pipeline was also updated to rely on the new run
 
 \subsubsection{Challenges}
 
-Although the migration mainly consisted of infrastructure changes, several compatibility issues were encountered during the upgrade.
-
-The most significant challenge was the stricter dependency resolution introduced by pnpm~10, which exposed packages relying on implicitly hoisted dependencies. These issues were resolved by explicitly declaring the required dependencies instead of relying on transitive package resolution.
-
-The upgrade also required regenerating the dependency lockfile and updating parts of the CI configuration to accommodate the new runtime environment. Once these adjustments were completed, the build pipeline executed successfully without further modifications.
+Although the migration primarily involved infrastructure-level changes, it was relatively straightforward to implement. Nevertheless, the upgrade required several supporting adjustments to ensure compatibility across the development and CI environments. In particular, the project dependency lockfile had to be regenerated to reflect the updated package manager version, and portions of the CI configuration were revised to accommodate the new Node.js and pnpm runtime. These changes ensured consistent dependency resolution and reproducible builds across local development and automated pipelines. After these updates were applied, the entire build and test pipeline executed successfully without requiring any additional modifications, confirming the compatibility of the project with the upgraded runtime environment.
 
 \subsubsection{Validation}
 
-The upgraded environment was validated by executing the complete continuous integration pipeline, including package installation, project builds, automated tests, Storybook generation, and end-to-end testing.
+The upgraded environment was validated by executing the complete \ac{CI} pipeline, including package installation, project builds, automated tests and Storybook generation.
 
 Successful execution of these workflows confirmed that the migration was fully compatible with the existing codebase while providing a standardized runtime environment based on Node.js~24 and pnpm~10.
 
-\begin{figure}[H]
-    \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} CI pipeline screenshot \vspace{2cm}}}
-    \caption{Successful execution of the CI pipeline after upgrading to Node.js~24 and pnpm~10.}
-    \label{fig:runtime-upgrade-ci}
-\end{figure}
+\subsection{Task 2: Upgrading Storybook to v10 and Exploring the Storybook MCP Server}
+\label{sec:storybook-upgrade}
 
+\subsubsection{Context and Motivation}
 
-\subsection{Task 2 --- Upgrading Storybook to v10}
-\label{sec:task2-storybook}
+Storybook\footnote{Storybook Definition} plays a central role in the \texttt{next-common} ecosystem. Beyond serving as a component development environment, it acts as the primary platform for documenting reusable components, validating UI behavior, and performing visual regression testing before components are consumed by downstream applications.
 
-\subsubsection{Why upgrade Storybook}
+The objective of this task was twofold:
 
-Storybook is not a peripheral tool in \texttt{next-common}: it is the primary interface through which product teams discover, review and validate shared components. It also acts as our visual regression baseline and a lightweight design-system documentation site.
+\begin{itemize}
+    \item Upgrade the existing Storybook installation to version 10 while ensuring compatibility with the existing component library and build pipeline.
+    \item Explore the newly introduced Storybook \ac{MCP} server and evaluate how it can improve AI-assisted development workflows.
+\end{itemize}
 
-Upgrading to \textbf{Storybook 10} was motivated by four considerations:
-
-\begin{enumerate}
-    \item \textbf{Performance.} Storybook 10 ships significant improvements to the dev server startup time and to the on-demand story loading pipeline. On a repository the size of \texttt{next-common}, this directly reduces the feedback loop for every front-end contributor.
-    \item \textbf{Security and maintenance.} Older Storybook majors accumulate transitive vulnerabilities (mostly around webpack, node-forge, and various markdown/serialization dependencies). Staying on a supported major is the cheapest security posture.
-    \item \textbf{Avoiding breaking-change debt.} Skipping majors is more expensive than upgrading incrementally, because breaking changes compound. Migrating one major at a time keeps the diff reviewable.
-    \item \textbf{Ecosystem alignment.} Several addons we depend on had already dropped support for older Storybook majors. Upgrading unlocked v10-only addons --- most importantly, the Performance Panel that is the subject of Task 3.
-\end{enumerate}
+Besides benefiting from performance improvements and long-term maintenance, upgrading Storybook also enabled the adoption of newer addons and tooling that are only available for recent Storybook versions.
 
 \subsubsection{Migration strategy}
 
-Rather than doing a big-bang upgrade, I followed a four-step migration plan:
+To minimize the migration risk, the upgrade was performed incrementally rather than replacing the entire configuration at once.
+
+The migration followed four main steps:
 
 \begin{enumerate}
-    \item \textbf{Inventory.} List every Storybook-related dependency currently installed (\texttt{storybook}, \texttt{@storybook/*}, framework packages, builder packages, community addons, internal custom addons).
-    \item \textbf{Automated migration.} Run Storybook's official codemod: \texttt{pnpm dlx storybook@latest upgrade}. This handles the majority of the mechanical changes to \texttt{.storybook/main.ts}, \texttt{.storybook/preview.ts}, and package versions.
-    \item \textbf{Manual review.} Read the \href{https://storybook.js.org/docs/migration-guide}{Storybook 10 migration guide} and manually apply the changes the codemod cannot infer --- mainly around addon registration, framework configuration, and custom Vite/webpack settings.
-    \item \textbf{CI validation.} Run \texttt{pnpm book} and \texttt{pnpm book:build} locally, then push to a feature branch and let CI confirm the build succeeds in a clean environment.
+    \item Inventorying all Storybook-related packages and addons currently used by the repository.
+    \item Executing the official Storybook migration utility (\lstinline|pnpm dlx storybook@latest upgrade|) to automate the majority of the configuration changes.
+    \item Reviewing the Storybook v10 migration guide and manually adapting the remaining breaking changes.
+    \item Validating the migration locally before executing the complete CI pipeline.
 \end{enumerate}
 
-\subsubsection{Configuration changes}
+This approach allowed automated transformations to be combined with manual verification, reducing the likelihood of regressions.
 
-\paragraph{\texorpdfstring{\texttt{.storybook/main.ts}}{.storybook/main.ts}}
+\subsubsection{Configuration updates}
 
-The v10 configuration is stricter about typing and about the shape of the \texttt{framework} entry. The relevant changes were:
+Several configuration files required modifications to comply with Storybook v10.
 
-\begin{itemize}
-    \item \texttt{framework} is now an object of the form \texttt{{ name: '@storybook/nextjs-vite', options: { ... } }} --- the old string form is deprecated.
-    \item \texttt{stories} glob patterns were adjusted to explicitly include \texttt{.mdx} files rather than relying on the previous auto-discovery.
-    \item Several deprecated top-level options (\texttt{features}, \texttt{core.builder} as a string) were replaced by their v10 equivalents.
-    \item \texttt{docs.autodocs} was renamed to \texttt{docs.autodocs: 'tag'} and stories now opt in via the \texttt{autodocs} tag rather than the previous heuristic.
-\end{itemize}
-
-\paragraph{\texorpdfstring{\texttt{.storybook/preview.ts}}{.storybook/preview.ts}}
+The most significant changes included:
 
 \begin{itemize}
-    \item The default export is now typed as \texttt{Preview} (imported from the framework package) instead of loosely typed as \texttt{Parameters}.
-    \item Global decorators were reorganized so that provider decorators (theme, i18n, router) compose cleanly with addon decorators.
-    \item The \texttt{parameters.docs} shape changed slightly for the new Docs 2 renderer; I updated our custom MDX docs pages accordingly.
+    \item Updating the Storybook framework configuration to use the new typed object syntax.
+    \item Revising story discovery patterns to explicitly include MDX documentation files.
+    \item Migrating deprecated configuration options to their Storybook v10 equivalents.
+    \item Updating the preview configuration by introducing the strongly typed \lstinline|Preview| object and reorganizing global decorators.
+    \item Updating documentation parameters to support the new Docs renderer.
 \end{itemize}
 
-\paragraph{Framework and builder packages}
+The migration also required updating the framework packages by replacing the previous Next.js integration with the newer \lstinline|@storybook/nextjs-vite| package and upgrading Vite to a compatible version.
 
-\texttt{next-common} uses the Next.js + Vite framework combination. The upgrade required:
+\subsubsection{Addon migration}
+
+Storybook addons were individually reviewed to verify their compatibility with version 10.
+
+The migration involved:
 
 \begin{itemize}
-    \item Replacing \texttt{@storybook/nextjs} with \texttt{@storybook/nextjs-vite} (already the recommended path in v10).
-    \item Bumping the Vite peer dependency to a version compatible with both Storybook 10 and our existing Vite plugins.
+    \item Replacing the deprecated \lstinline|@storybook/addon-essentials| package with its individual addons.
+    \item Upgrading compatible addons such as Accessibility, Links, and Interactions.
+    \item Updating internal addons to follow the new manager/preview registration API.
+    \item Removing or replacing community addons that were no longer maintained or whose functionality had become part of Storybook itself.
 \end{itemize}
 
-\subsubsection{Addon compatibility audit}
-
-Every addon had to be re-evaluated for v10 support. I produced a small compatibility matrix during the migration:
+Table~\ref{tab:addon-compat} summarizes the compatibility status of the different addons.
 
 \begin{table}[h]
     \centering
-    \caption{Addon compatibility matrix for the Storybook v10 upgrade}
+    \caption{Storybook v10 addon compatibility}
     \label{tab:addon-compat}
-    \begin{tabular}{@{}p{3.8cm}p{3.8cm}p{6.5cm}@{}}
+    \begin{tabularx}{\textwidth}{@{}l l X@{}}
         \toprule
-        \textbf{Addon} & \textbf{v10 status} & \textbf{Action taken} \\
+        \textbf{Addon} & \textbf{Status} & \textbf{Action} \\
         \midrule
-        \texttt{@storybook/addon-essentials} & Split into individual addons in v10 & Replaced with the explicit sub-addons we actually use (controls, actions, viewport, backgrounds, measure, outline). \\
-        \texttt{@storybook/addon-a11y} & Compatible & Upgraded to matching v10 version. \\
-        \texttt{@storybook/addon-links} & Compatible & Upgraded. \\
-        \texttt{@storybook/addon-interactions} & Compatible, API mostly stable & Upgraded; minor changes to \texttt{play} typing. \\
-        Internal custom addon (design tokens) & Needed migration & Updated to the new manager/preview entry-point split; registered via the v10 addon API. \\
-        Community MDX-based addons & Mixed & One addon was replaced by a supported alternative; another was removed because its use case is now covered by native Storybook v10 features. \\
+        \texttt{@storybook/addon-essentials} & Deprecated & Split into individual addons. \\
+        \texttt{@storybook/addon-a11y} & Compatible & Updated to v10. \\
+        \texttt{@storybook/addon-links} & Compatible & Updated. \\
+        \texttt{@storybook/addon-interactions} & Compatible & Updated with minor API adaptations. \\
+        Internal custom addons & Required migration & Adapted to the new registration API. \\
+        Community addons & Mixed & Updated, replaced or removed depending on compatibility. \\
         \bottomrule
-    \end{tabular}
+    \end{tabularx}
 \end{table}
 
-\begin{figure}[h]
+Figure~\ref{fig:storybook-v10} illustrates the upgraded Storybook interface after the migration.
+
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~4 \vspace{2cm}}}
-    \caption{\texttt{next-common} Storybook running on v10, showing the sidebar, canvas and addon panels.}
-    \label{fig:x4-storybook10}
+    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder \vspace{2cm}}}
+    \caption{Storybook v10 running with the updated configuration.}
+    \label{fig:storybook-v10}
 \end{figure}
 
-\subsubsection{Build and CI issues encountered}
+\subsubsection{Migration challenges}
 
-The upgrade was not silent --- a few issues required real investigation:
+Although the official migration tool automated a significant portion of the upgrade, several issues required manual intervention.
+
+The most important challenges encountered were:
 
 \begin{itemize}
-    \item \textbf{MDX 3 parser strictness.} Storybook 10 uses a newer MDX parser that rejects several previously tolerated constructs (unescaped \texttt{<}, JSX comments outside of expressions). A handful of docs pages had to be adjusted.
-    \item \textbf{Vite dependency pre-bundling.} After the upgrade, cold \texttt{pnpm book} starts were slower than expected because Vite was re-pre-bundling on every start. Adding an explicit \texttt{optimizeDeps.include} entry for our largest internal packages fixed this.
-    \item \textbf{CI memory footprint.} \texttt{pnpm book:build} briefly exceeded the CI runner's memory limit due to the concurrent MDX and React Docgen extraction. I split the build step to run static analysis and asset compilation sequentially, and the memory usage dropped back well under the limit.
-    \item \textbf{Snapshot test churn.} A few visual regression baselines changed because Storybook 10 renders story containers with slightly different default padding. I reviewed the diffs manually and re-approved the new baselines.
+    \item Adapting documentation pages to the stricter MDX 3 parser.
+    \item Updating Vite dependency pre-bundling to reduce cold startup times.
+    \item Reducing the CI memory consumption during the static Storybook build.
+    \item Reviewing and validating visual regression snapshots affected by changes in Storybook's default rendering behavior.
 \end{itemize}
 
-\subsubsection{Acceptance criteria --- verification}
+Resolving these issues ensured that both local development and CI builds remained stable after the migration.
 
-Against the acceptance criteria of the ticket:
+\subsubsection{Exploring the Storybook MCP server}
+
+One of the most significant new features introduced in Storybook 10 is the Model Context Protocol (MCP) server.
+
+Unlike traditional documentation, the MCP server exposes Storybook metadata through a standardized protocol that can be consumed directly by AI assistants. Instead of manually searching for stories or component APIs, an AI agent can query the running Storybook instance to retrieve information about available components, their properties, documentation, and examples.
+
+This capability opens new possibilities for AI-assisted frontend development, including:
 
 \begin{itemize}
-    \item Storybook dependencies in \texttt{next-common} are upgraded to v10. \textbf{Verified} via \texttt{pnpm list "storybook*"}.
-    \item \texttt{pnpm book} starts successfully and loads \texttt{next-common} stories. \textbf{Verified} locally on macOS and on Linux (the CI runner image).
-    \item \texttt{pnpm book:build} succeeds locally and in CI. \textbf{Verified} --- the CI job is green.
-    \item Key addons still work (or are replaced with supported alternatives). \textbf{Verified} through the compatibility matrix above.
+    \item Discovering available components without manually browsing Storybook.
+    \item Generating implementation examples based on existing stories.
+    \item Assisting developers in selecting reusable components that match their requirements.
+    \item Reducing hallucinations by allowing AI assistants to rely on the actual component library instead of prior knowledge.
+\end{itemize}
+
+Although the MCP server was explored as part of this internship, it was not yet integrated into the team's daily development workflow. Nevertheless, it represents a promising direction for future AI-assisted development within the frontend platform.
+
+\subsubsection{Validation}
+
+Following the migration, the upgraded Storybook environment was successfully validated.
+
+The validation process confirmed that:
+
+\begin{itemize}
+    \item Storybook dependencies were successfully upgraded to version 10.
+    \item Development mode (\lstinline|pnpm book|) executed correctly.
+    \item Static builds (\lstinline|pnpm book:build|) completed successfully both locally and in CI.
+    \item Existing addons remained functional after migration or were replaced by supported alternatives.
+    \item Shared components continued to render correctly, ensuring backward compatibility for downstream applications.
 \end{itemize}
 
 \subsubsection{Exploring the Storybook MCP server}
