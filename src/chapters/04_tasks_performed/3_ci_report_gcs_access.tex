@@ -1,18 +1,18 @@
-\section{Development of a Reverse Proxy for Google Cloud Storage}
+\section{Development of a Proxy for Google Cloud Storage}
 \label{sec:gcs-proxy}
 
 \subsection{Context}
-\acf{CI} pipelines automatically generate numerous artifacts such as Playwright reports, Cypress reports, visual regression reports, code coverage reports and static analysis reports. These artifacts are essential for validating software quality and approving pull requests throughout the development lifecycle.
+\acf{CI} pipelines automatically generate numerous artifacts such as tests, code coverage and static analysis reports. These artifacts are essential for validating software quality and approving \acs{PR} throughout the development lifecycle.
 
 Initially, these reports were stored using GitHub Actions Artifacts. Although this solution integrates naturally with GitHub workflows, it presents several limitations. The storage consumed by artifacts continuously increases over time, especially for large visual regression reports, leading to higher infrastructure costs. Moreover, GitHub artifacts cannot be accessed directly through a web browser. Developers must download the archive, extract its contents, and open the report locally before consulting it.
 
 To overcome these limitations, Rakuten France decided to migrate \ac{CI} artifacts to private \acf{GCS} buckets. \ac{GCS} provides scalable, durable and cost-effective object storage. However, because the buckets remain private, reports cannot be accessed without Google Cloud authentication.
 
-To provide secure yet transparent access to these reports, a reverse proxy application was developed. The application authenticates against Google Cloud Storage on behalf of internal users and exposes reports through \acs{HTTP} endpoints while keeping the storage infrastructure completely private.
+To provide secure yet transparent access to these reports, a proxy application was developed. The application authenticates against Google Cloud Storage on behalf of internal users and exposes reports through \acs{HTTP} endpoints while keeping the storage infrastructure completely private.
 
 \subsection{Objectives}
 
-The project pursued both technical and educational objectives.
+The project pursued both technical and educational objectives, including:
 
 \begin{itemize}
 \item Keep Google Cloud Storage buckets private and secure.
@@ -24,12 +24,12 @@ The project pursued both technical and educational objectives.
 
 \subsection{System Architecture}
 
-The application follows a reverse proxy architecture. Every request is received by the proxy instead of directly reaching Google Cloud Storage.
+The application follows a proxy architecture. Every request is received by the proxy instead of directly reaching Google Cloud Storage.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=.95\textwidth]{../assets/tools/rakuten_technical_environment.png}
-\caption{Overall architecture of the reverse proxy.}
+\caption{Overall architecture of the proxy.}
 \label{fig:gcs_architecture}
 \end{figure}
 
@@ -39,7 +39,7 @@ The processing workflow is summarized below:
 \item Receive an incoming HTTP request.
 \item Extract the bucket name and object path.
 \item Authenticate using a Google Cloud Service Account.
-\item Reuse a cached OAuth token whenever possible.
+\item Cache the auth token for a specific amount of time.
 \item Request the object through the Google Cloud Storage API.
 \item Stream the object directly to the client.
 \item Return the corresponding HTTP response.
@@ -47,9 +47,9 @@ The processing workflow is summarized below:
 
 \subsection{Authentication and Token Caching}
 
-The Infrastructure team provides the application with a Google Cloud Service Account JSON credential. During startup, the application loads these credentials and generates an OAuth access token.
+The Infrastructure team provides the application with a Google Cloud Service Account JSON credential. During startup, the application loads these credentials and generates an authentication access token.
 
-Since generating a token for every request would introduce unnecessary latency, the application stores the generated token in memory until its expiration time. When the token expires, a new one is automatically generated and replaces the previous token. This caching strategy significantly reduces authentication overhead under heavy workloads.
+Since generating a token for every request would introduce unnecessary latency, the application stores the generated token in memory until its expiration time (e.g., 1 hour). When the token expires, a new one is automatically generated and replaces the previous token. This caching strategy significantly reduces authentication overhead under heavy workloads.
 
 \subsection{Streaming Mechanism}
 
@@ -57,28 +57,19 @@ Instead of downloading the complete object before sending it to the client, the 
 
 \subsection{Technology Stack}
 
-The project is developed using TypeScript as the primary programming language, with
-Node.js as the runtime environment and pnpm as the package manager. The HTTP server
-is implemented using the Hono framework, a lightweight and high-performance web
-framework designed for building modern HTTP servers and APIs with JavaScript and
-TypeScript.
+The project is developed using \acs{TS} as the primary programming language, with Node.js as the runtime environment and pnpm as the package manager. The HTTP server is implemented using the \textbf{Hono} framework, a lightweight and high-performance web framework designed for building modern HTTP servers and APIs with \acs{JS} and \acs{TS}.
 
-\textbf{Hono} is based on Web Standard APIs, enabling applications to run across multiple
-runtimes such as Node.js, Bun, Deno, and Cloudflare Workers. It also provides a simple Express-like routing system while maintaining a minimal footprint.
+\textbf{Hono} is based on Web Standard APIs, enabling applications to run across multiple runtimes such as Node.js, Bun, Deno, and Cloudflare Workers. It also provides a simple Express-like routing system while maintaining a minimal footprint.
 
-The web interface of the application is developed using standard web technologies,
-including HTML, CSS, and JavaScript.
+The web interface of the application is developed using standard web technologies, including \acs{HTML}, \acs{CSS}, and \acs{JS}.
  
-Google Cloud Storage is used as the storage solution for hosting CI-generated
-artifacts, while Google Cloud Service Account credentials provide secure and
-controlled authentication for accessing cloud resources.
+\acf{GCS} Google Cloud Storage is used as the storage solution for hosting \ac{CI}-generated artifacts, while Google Cloud Service Account credentials provide secure and controlled authentication for accessing cloud resources.
 
-The project source code is hosted in an internal GitHub organization repository,
-ensuring that access is restricted to authorized users within the company.
+The rest of the project version control, \ac{CI}/\acs{CD} pipelines and maintenance are managed by the internal DevOps tools presented in section~\ref{sec:rakuten-devops-tools}.
 
 \subsection{REST API}
 
-The application exposes several REST endpoints.
+The application exposes several REST endpoints that can be classified into two categories: functional endpoints and operational endpoints.
 
 \subsubsection{Functional Endpoints}
 
@@ -94,7 +85,7 @@ or a nested path pointing to a file or folder within the specified bucket.
 Concretely, the application provides the following endpoints:
 
 \begin{itemize}
-    \item \texttt{GET /gcs/<bucket>/<filePath>}: Serve a report file directly from Google Cloud Storage.
+    \item \texttt{GET /gcs/<bucket>/<filePath>}: Serve a file (or a report index.html file) directly from \acf{GCS}.
     \item \texttt{GET /download/<bucket>/<filePath>}: Download a report or a set of files as a ZIP archive.
     \item \texttt{GET /check-exist/<bucket>/<filePath>}: Verify whether a specific report or file exists.
     \item \texttt{GET /search/<bucket>/<filePath>}: Search for the latest report matching a given prefix or suffix.
@@ -103,7 +94,7 @@ Concretely, the application provides the following endpoints:
 
 \subsubsection{Operational Endpoints}
 
-Besides the functional API, several operational endpoints facilitate monitoring and maintenance.
+The application provides also a set of several operational endpoints to facilitate use, monitoring and maintenance.
 
 \paragraph{Web Interface}
 
@@ -127,22 +118,33 @@ Figures~\ref{fig:file_existence_check}  illustrate the web interface (in light m
 
 \paragraph{Health Check}
 
-The endpoint \texttt{/health} is used by Consul to verify service availability. Figure~\ref{fig:consul_health_check} illustrates the health check of the deployed application on Consul.
+The /health endpoint is used by Consul to verify the availability of the service. The Consul agent periodically (e.g., every 5 seconds) sends a request to this endpoint, which returns a \acs{JSON} object containing a \texttt{status} key with one of three possible values: \textcolor{green}{\texttt{UP}}, \textcolor{red}{\texttt{DOWN}}, or \textcolor{orange}{\texttt{DEGRADED}}. Based on this status, Consul determines the health of the service and can trigger alerts or take corrective actions when necessary.
+
+Figure~\ref{fig:consul_health_check} illustrates the health check of the deployed application on Consul.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/consul_health_check.png}
-\caption{The Reverse Proxy Health check on Consul}
+\caption{The Proxy Health check on Consul}
 \label{fig:consul_health_check}
 \end{figure}
 
 \paragraph{Metrics}
 
-The endpoint \texttt{/metrics} exposes Prometheus-compatible metrics for application monitoring.
+This endpoint exposes application metrics in a Prometheus-compatible format, including request counts, response times and other relevant indicators. These metrics can be collected by Prometheus and visualized through Grafana, providing valuable insights into the application's performance, availability, and overall health.
+
+Figure~\ref{fig:metrics_exposure} shows the metrics exposed by the deployed application and accessible through the \href{https://chromewebstore.google.com/detail/prometheus-viewer/cbemcojgcihplgfjjdoplpfjmamiikcn}{Prometheus Viewer} Chrome extension.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/metrics_exposure.png}
+\caption{The Proxy Metrics Exposure}
+\label{fig:metrics_exposure}
+\end{figure}
 
 \paragraph{API Documentation}
 
-Interactive API documentation is generated and exposed through Swagger/OpenAPI. Figure~\ref{fig:openapi_documentation} shows the Swagger UI interface for the reverse proxy.
+Interactive API documentation is generated and exposed through Swagger/OpenAPI. Figure~\ref{fig:openapi_documentation} shows the Swagger UI interface for the proxy.
 
 \begin{figure}[H]
 \centering
@@ -158,20 +160,24 @@ A dedicated Google Cloud Storage bucket was created for integration testing.
 The test suite validates:
 
 \begin{itemize}
-\item Retrieval of HTML reports.
-\item Retrieval of JSON resources.
-\item Retrieval of static assets.
-\item Access to non-existing objects.
-\item Report discovery.
-\item Report download.
-\item Bucket listing.
-\item Token caching under concurrent requests.
+  \item Serves \texttt{index.html} with correct status, content-type, and body
+  \item Serves \texttt{index.html} when the report root URL has a trailing slash
+  \item Serves \texttt{index.json} with correct status, content-type, and body
+  \item Returns the latest matching folder for a given prefix
+  \item Returns an empty folder when no prefix match is found
+  \item Returns the latest matching folder for a given suffix
+  \item Returns an empty folder when no suffix match is found
+  \item Rejects search paths that do not use \texttt{prefix=} or \texttt{suffix=}
+  \item Lists available GCS buckets
+  \item Rejects file upload paths containing traversal
+  \item Rejects empty file upload bodies
+  \item Rejects invalid folder upload zip bodies
 \end{itemize}
 
 Load tests were also performed to verify that cached authentication tokens are effectively reused, reducing the number of OAuth authentication requests while maintaining low response times.
 
 \subsection{Summary}
 
-The developed reverse proxy provides secure and efficient access to CI artifacts stored in private Google Cloud Storage buckets. By combining authenticated access, token caching, streaming, monitoring endpoints and a simple web interface, the application improves report accessibility while preserving the security of the underlying storage infrastructure. Furthermore, the project provided valuable experience covering the complete software engineering lifecycle, from requirements analysis and architecture design to implementation, testing and deployment.
+The developed proxy provides secure and efficient access to \ac{CI} artifacts stored in private \ac{GCS} buckets. By combining authenticated access, token caching, streaming, a simple web interface and monitoring endpoints, the application improves report accessibility while preserving the security of the underlying storage infrastructure. Furthermore, the project provided valuable experience covering the complete software engineering lifecycle, from requirements analysis and architecture design to implementation, testing and deployment.
 
 \clearpage
