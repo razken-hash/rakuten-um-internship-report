@@ -10,7 +10,7 @@ Figure~\ref{fig:rakuten-technical-ecosystem} illustrates the technical environme
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=\textwidth]{../assets/tools/rakuten_technical_environment.png}
+    \includegraphics[width=\textwidth]{../assets/tech_env/tools.png}
     \caption{Rakuten France frontend technical ecosystem.}
     \label{fig:rakuten-technical-ecosystem}
 \end{figure}
@@ -112,6 +112,16 @@ The platform is consumed by several business-oriented applications:
 Alongside the Next.js-based ecosystem, Rakuten France also maintains a Hypernova-based frontend architecture. Similar to \lstinline|next-common|, \lstinline|hypernova-next-common| provides a shared library of reusable components, utilities, and common services for Hypernova applications. It serves as the common foundation for applications built on the Hypernova framework.
 
 One of the primary consumers of this shared library is \lstinline|hypernova-vis-fo|, the Hypernova implementation of the visual merchandising frontend, which relies on \lstinline|hypernova-next-common| to ensure consistency, code reuse, and maintainability across the Hypernova ecosystem.
+
+Figure \ref{fig:architecture} illustrates the overall architecture of the frontend applications at Rakuten France, highlighting the shared foundations, business-oriented applications, and their relationships within the ecosystem.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=.95\textwidth]{../assets/tech_env/architecture.png}
+\caption{Overall architecture of the frontend applications.}
+\label{fig:architecture}
+\end{figure}
+
 
 \section{Deployment Environments}
 
