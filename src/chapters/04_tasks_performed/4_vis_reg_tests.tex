@@ -31,7 +31,7 @@ The visual regression workflow consists of three main phases:
     
     \item \textbf{Baseline comparison:} the generated screenshots are compared against reference snapshots stored from a previous validated version.
     
-    \item \textbf{Difference analysis:} a pixel-level comparison algorithm identifies visual changes according to a predefined threshold and generates a regression report.
+    \item \textbf{Difference analysis:} a pixel-level comparison algorithm identifies visual changes according to a predefined threshold and generates a visual regression report.
 \end{enumerate}
 
 
@@ -40,16 +40,17 @@ The visual regression workflow consists of three main phases:
 \textbf{Reg-Suit} is an open-source visual regression testing framework based on a plugin architecture. It manages the complete comparison lifecycle, including:
 
 \begin{itemize}
-    \item Collecting actual screenshots.
-    \item Retrieving baseline screenshots.
-    \item Performing pixel comparison.
+    \item Retrieving actual and baseline screenshots.
+    \item Performing pixel-based comparison.
     \item Generating HTML reports.
-    \item Publishing visual regression artifacts.
+    \item Publishing visual regression artifacts to the cloud.
 \end{itemize}
 
-The generated report contains an interactive visualization of detected differences and a JSON file describing the comparison results.
+The generated report contains an interactive visualization of detected differences read from a JSON file describing the comparison results.
 
-\subsection{System Configuration}
+\subsection{Reg-Suit Configuration}
+
+The first step is installing the Regsuit package as well as its plugins
 
 Reg-Suit is configured through a JSON configuration file. The main configuration parameters are shown below:
 
