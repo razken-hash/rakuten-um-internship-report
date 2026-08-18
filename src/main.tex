@@ -52,6 +52,33 @@
   backgroundcolor=\color{gray!5}
 }
 
+\lstdefinelanguage{CSS}{
+    keywords={},
+    sensitive=true,
+    comment=[s]{/*}{*/},
+    morestring=[b]",
+    morestring=[b]',
+    moredelim=[s][\color{blue}]{:}{;},
+    moredelim=[s][\color{red}]{.}{\ },
+    moredelim=[s][\color{green}]{\#}{\ },
+}
+
+\lstdefinelanguage{TypeScript}{
+    keywords={
+        const, let, var, function, return, if, else, for, while,
+        class, interface, extends, implements, import, export,
+        from, new, async, await, public, private, protected
+    },
+    keywordstyle=\color{blue},
+    sensitive=true,
+    comment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    morestring=[b]',
+    morestring=[b]"
+}
+
 \lstdefinelanguage{json}{
     basicstyle=\ttfamily\small,
     numbers=left,

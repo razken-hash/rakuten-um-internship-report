@@ -1,7 +1,6 @@
-\section{Development of a Proxy for Google Cloud Storage}
-\label{sec:gcs-proxy}
+\chapter{Development of a Proxy for Google Cloud Storage}
 
-\subsection{Context}
+\section{Context}
 \acf{CI} pipelines automatically generate numerous artifacts such as tests, code coverage and static analysis reports. These artifacts are essential for validating software quality and approving \acs{PR} throughout the development lifecycle.
 
 Initially, these reports were stored using GitHub Actions Artifacts. Although this solution integrates naturally with GitHub workflows, it presents several limitations. The storage consumed by artifacts continuously increases over time, especially for large visual regression reports, leading to higher infrastructure costs. Moreover, GitHub artifacts cannot be accessed directly through a web browser. Developers must download the archive, extract its contents, and open the report locally before consulting it.
@@ -10,7 +9,7 @@ To overcome these limitations, Rakuten France decided to migrate \ac{CI} artifac
 
 To provide secure yet transparent access to these reports, a proxy application was developed. The application authenticates against Google Cloud Storage on behalf of internal users and exposes reports through \acs{HTTP} endpoints while keeping the storage infrastructure completely private.
 
-\subsection{Objectives}
+\section{Objectives}
 
 The project pursued both technical and educational objectives, including:
 
@@ -22,7 +21,7 @@ The project pursued both technical and educational objectives, including:
 \item Discover the complete software lifecycle from requirements analysis to deployment and maintenance.
 \end{itemize}
 
-\subsection{System Architecture}
+\section{System Architecture}
 
 The application follows a proxy architecture. Every request is received by the proxy instead of directly reaching Google Cloud Storage.
 
@@ -45,17 +44,17 @@ The processing workflow is summarized below:
 \item Return the corresponding HTTP response.
 \end{enumerate}
 
-\subsection{Authentication and Token Caching}
+\section{Authentication and Token Caching}
 
 The Infrastructure team provides the application with a Google Cloud Service Account JSON credential. During startup, the application loads these credentials and generates an authentication access token.
 
 Since generating a token for every request would introduce unnecessary latency, the application stores the generated token in memory until its expiration time (e.g., 1 hour). When the token expires, a new one is automatically generated and replaces the previous token. This caching strategy significantly reduces authentication overhead under heavy workloads.
 
-\subsection{Streaming Mechanism}
+\section{Streaming Mechanism}
 
 Instead of downloading the complete object before sending it to the client, the application streams files directly from Google Cloud Storage to the HTTP response. Streaming reduces memory consumption, decreases latency, and allows very large HTML reports and visual regression artifacts to be served efficiently.
 
-\subsection{Technology Stack}
+\section{Technology Stack}
 
 The project is developed using \acs{TS} as the primary programming language, with Node.js as the runtime environment and pnpm as the package manager. The HTTP server is implemented using the \textbf{Hono} framework, a lightweight and high-performance web framework designed for building modern HTTP servers and APIs with \acs{JS} and \acs{TS}.
 
@@ -67,11 +66,11 @@ The web interface of the application is developed using standard web technologie
 
 The rest of the project version control, \ac{CI}/\acs{CD} pipelines and maintenance are managed by the internal DevOps tools presented in section~\ref{sec:rakuten-devops-tools}.
 
-\subsection{\acs{API} Endpoints}
+\section{\acs{API} Endpoints}
 
 The application exposes several REST endpoints that can be classified into two categories: functional endpoints and operational endpoints.
 
-\subsubsection{Functional Endpoints}
+\subsection{Functional Endpoints}
 
 The basic endpoint structure is defined as follows:
 
@@ -92,7 +91,7 @@ Concretely, the application provides the following endpoints:
     \item \texttt{GET /buckets}: List all accessible Google Cloud Storage buckets.
 \end{itemize}
 
-\subsubsection{Operational Endpoints}
+\subsection{Operational Endpoints}
 
 The application provides also a set of several operational endpoints to facilitate use, monitoring and maintenance.
 
@@ -153,7 +152,7 @@ Interactive API documentation is generated and exposed through Swagger/OpenAPI. 
 \label{fig:openapi_documentation}
 \end{figure}
 
-\subsection{Testing}
+\section{Testing}
 
 A dedicated Google Cloud Storage bucket was created for integration testing.
 
@@ -176,7 +175,7 @@ The test suite validates:
 
 Load tests were also performed to verify that cached authentication tokens are effectively reused, reducing the number of OAuth authentication requests while maintaining low response times.
 
-\subsection{Summary}
+\section{Summary}
 
 The developed proxy provides secure and efficient access to \ac{CI} artifacts stored in private \ac{GCS} buckets. By combining authenticated access, token caching, streaming, a simple web interface and monitoring endpoints, the application improves report accessibility while preserving the security of the underlying storage infrastructure. Furthermore, the project provided valuable experience covering the complete software engineering lifecycle, from requirements analysis and architecture design to implementation, testing and deployment.
 

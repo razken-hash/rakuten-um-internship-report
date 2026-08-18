@@ -1,7 +1,6 @@
-\section{Modernizing \texttt{next-common} And Storybook MCP Discovery}
-\label{sec:storybook-mcp}
+\chapter{Modernizing \texttt{next-common} And Storybook MCP Discovery}
 
-\subsection{Context}
+\section{Context}
 
 Because every micro-frontend application depends on next-common, any friction in its build pipeline, its component workshop (Storybook) or its runtime environment is amplified across the entire architecture.
 
@@ -24,15 +23,15 @@ The following section presents these tasks in a logical order, explains the reas
     \label{fig:x1-overview}
 \end{figure}
 
-\subsection{Task 1: Upgrading the Runtime Environment}
+\section{Task 1: Upgrading the Runtime Environment}
 
-\subsubsection{Context and Motivation}
+\subsection{Context and Motivation}
 
 At the beginning of this task, the \texttt{next-common} repository was still based on \textbf{Node.js 20} and an older version of \textbf{pnpm}. As the shared frontend foundation used by multiple product teams, keeping the development environment aligned with the latest supported tooling was essential to ensure compatibility, maintainability, and long-term support.
 
 The objective of this task was therefore to upgrade the project to \textbf{Node.js 24} and \textbf{pnpm 10}, while ensuring that the new runtime was consistently adopted across local development, continuous integration, and Docker-based environments.
 
-\subsubsection{Implementation}
+\subsection{Implementation}
 
 The migration affected the different parts of the development infrastructure.
 \begin{table}[H]
@@ -66,20 +65,20 @@ Updated the project documentation to reflect the new runtime prerequisites for c
 
 The Docker image used by the CI pipeline was also updated to rely on the new runtime environment, ensuring that local development and automated builds execute under identical conditions.
 
-\subsubsection{Challenges}
+\subsection{Challenges}
 
 Although the migration primarily involved infrastructure-level changes, it was relatively straightforward to implement. Nevertheless, the upgrade required several supporting adjustments to ensure compatibility across the development and CI environments. In particular, the project dependency lockfile had to be regenerated to reflect the updated package manager version, and portions of the CI configuration were revised to accommodate the new Node.js and pnpm runtime. These changes ensured consistent dependency resolution and reproducible builds across local development and automated pipelines. After these updates were applied, the entire build and test pipeline executed successfully without requiring any additional modifications, confirming the compatibility of the project with the upgraded runtime environment.
 
-\subsubsection{Validation}
+\subsection{Validation}
 
 The upgraded environment was validated by executing the complete \ac{CI} pipeline, including package installation, project builds, automated tests and Storybook generation.
 
 Successful execution of these workflows confirmed that the migration was fully compatible with the existing codebase while providing a standardized runtime environment based on Node.js~24 and pnpm~10.
 
-\subsection{Task 2: Upgrading Storybook to v10 and Exploring the Storybook MCP Server}
+\section{Task 2: Upgrading Storybook to v10 and Exploring the Storybook MCP Server}
 \label{sec:storybook-upgrade}
 
-\subsubsection{Context and Motivation}
+\subsection{Context and Motivation}
 
 Storybook\footnote{Storybook Definition} plays a central role in the \texttt{next-common} ecosystem. Beyond serving as a component development environment, it acts as the primary platform for documenting reusable components, validating UI behavior, and performing visual regression testing before components are consumed by downstream applications.
 
@@ -92,7 +91,7 @@ The objective of this task was twofold:
 
 Besides benefiting from performance improvements and long-term maintenance, upgrading Storybook also enabled the adoption of newer addons and tooling that are only available for recent Storybook versions.
 
-\subsubsection{Migration strategy}
+\subsection{Migration strategy}
 
 To minimize the migration risk, the upgrade was performed incrementally rather than replacing the entire configuration at once.
 
@@ -107,7 +106,7 @@ The migration followed four main steps:
 
 This approach allowed automated transformations to be combined with manual verification, reducing the likelihood of regressions.
 
-\subsubsection{Configuration updates}
+\subsection{Configuration updates}
 
 Several configuration files required modifications to comply with Storybook v10.
 
@@ -123,7 +122,7 @@ The most significant changes included:
 
 The migration also required updating the framework packages by replacing the previous Next.js integration with the newer \lstinline|@storybook/nextjs-vite| package and upgrading Vite to a compatible version.
 
-\subsubsection{Addon migration}
+\subsection{Addon migration}
 
 Storybook addons were individually reviewed to verify their compatibility with version 10.
 
@@ -165,7 +164,7 @@ Figure~\ref{fig:storybook-v10} illustrates the upgraded Storybook interface afte
     \label{fig:storybook-v10}
 \end{figure}
 
-\subsubsection{Migration challenges}
+\subsection{Migration challenges}
 
 Although the official migration tool automated a significant portion of the upgrade, several issues required manual intervention.
 
@@ -180,7 +179,7 @@ The most important challenges encountered were:
 
 Resolving these issues ensured that both local development and CI builds remained stable after the migration.
 
-\subsubsection{Exploring the Storybook MCP server}
+\subsection{Exploring the Storybook MCP server}
 
 One of the most significant new features introduced in Storybook 10 is the Model Context Protocol (MCP) server.
 
@@ -197,7 +196,7 @@ This capability opens new possibilities for AI-assisted frontend development, in
 
 Although the MCP server was explored as part of this internship, it was not yet integrated into the team's daily development workflow. Nevertheless, it represents a promising direction for future AI-assisted development within the frontend platform.
 
-\subsubsection{Validation}
+\subsection{Validation}
 
 Following the migration, the upgraded Storybook environment was successfully validated.
 
@@ -211,7 +210,7 @@ The validation process confirmed that:
     \item Shared components continued to render correctly, ensuring backward compatibility for downstream applications.
 \end{itemize}
 
-\subsubsection{Exploring the Storybook MCP server}
+\subsection{Exploring the Storybook MCP server}
 
 Storybook 10 introduced a \textbf{Model Context Protocol (MCP) server} --- an integration point that lets AI assistants (like the one in the IDE I use daily) query Storybook's story index, read story metadata, and reason about component APIs without needing to scrape the running UI or the file system directly.
 
@@ -240,16 +239,16 @@ I spent time exploring this new capability because it is directly relevant to th
     \label{fig:x5-mcp}
 \end{figure}
 
-\subsection{Task 3 --- Adding the Storybook Performance Panel Addon}
+\section{Task 3 --- Adding the Storybook Performance Panel Addon}
 \label{sec:task3-perf-panel}
 
-\subsubsection{Motivation}
+\subsection{Motivation}
 
 Performance regressions are notoriously hard to catch during code review. A component that renders in 40\,ms today may quietly grow to 200\,ms after a few refactors, because reviewers cannot easily observe render behavior from a diff. Once the regression lands, it becomes an incident-driven investigation.
 
 The \textbf{Performance Panel} addon (\href{https://github.com/github/storybook-addon-performance-panel}{\texttt{@github-ui/storybook-addon-performance-panel}}) directly addresses this gap. It surfaces a live dashboard inside Storybook --- visible as a \textbf{Performance} panel next to Controls and Actions --- that displays render timings, re-render counts and other performance signals for the currently viewed story. Because every reusable component in \texttt{next-common} has at least one story, wiring the addon in gives us performance visibility everywhere, for free.
 
-\subsubsection{Integration steps}
+\subsection{Integration steps}
 
 The integration was deliberately kept minimal and reversible.
 
@@ -269,7 +268,7 @@ The full integration was under 15 lines of code.
     \label{fig:x6-perf-panel}
 \end{figure}
 
-\subsubsection{Acceptance criteria --- verification}
+\subsection{Acceptance criteria --- verification}
 
 \begin{itemize}
     \item \texttt{@github-ui/storybook-addon-performance-panel} is added as a dependency in \texttt{next-common} Storybook. \textbf{Verified.}
@@ -279,7 +278,7 @@ The full integration was under 15 lines of code.
     \item At least one representative story is validated with the panel working. \textbf{Verified} on \texttt{ProductCardGrid} and confirmed on two additional stories to make sure the wiring was not story-specific.
 \end{itemize}
 
-\subsubsection{Recommended usage}
+\subsection{Recommended usage}
 
 I also added a short ``How to read the Performance panel'' note to the internal Storybook docs page, so contributors know:
 
@@ -289,7 +288,7 @@ I also added a short ``How to read the Performance panel'' note to the internal 
     \item How to compare two branches by opening two Storybook tabs side by side.
 \end{itemize}
 
-\subsection{Cross-Cutting Challenges and How I Handled Them}
+\section{Cross-Cutting Challenges and How I Handled Them}
 
 Beyond the per-task issues already documented, three cross-cutting challenges shaped how I approached the work:
 
@@ -306,7 +305,7 @@ Beyond the per-task issues already documented, three cross-cutting challenges sh
     \label{fig:x7-prs}
 \end{figure}
 
-\subsection{Results and Impact}
+\section{Results and Impact}
 
 The combined outcome of the three tasks:
 
@@ -319,7 +318,7 @@ The combined outcome of the three tasks:
 
 Together, these three changes shift \texttt{next-common} from a \emph{maintenance-friction} posture to an \emph{actively improving} posture --- which is precisely the theme of the branch this work targeted (\texttt{release/always-improve-always-advance}).
 
-\subsection{Lessons Learned}
+\section{Lessons Learned}
 
 Reflecting on the internship work in this chapter, the main technical and methodological takeaways are:
 
@@ -331,7 +330,7 @@ Reflecting on the internship work in this chapter, the main technical and method
     \item \textbf{Developer-experience tooling deserves the same rigor as production code.} The Performance Panel addon integration is only 15 lines of code, but choosing the right addon, validating it on a representative story, and documenting how to read its output is what turns those 15 lines into an actual team-level improvement.
 \end{itemize}
 
-\subsection{Conclusion}
+\section{Conclusion}
 
 This chapter documented three interconnected improvements to \texttt{next-common}: a runtime upgrade to Node 24 and pnpm 10, a Storybook upgrade to v10 with an exploration of its new MCP server, and the addition of the Storybook Performance Panel addon. Each task was small enough to ship independently, but together they constitute a coherent modernization of the front-end platform used across the organization.
 

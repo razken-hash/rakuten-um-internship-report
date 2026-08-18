@@ -19,6 +19,7 @@
 
 % ---------------- TABLE OF CONTENTS ----------------
 
+\setcounter{tocdepth}{1}
 \tableofcontents
 
 % ---------------- LIST OF FIGURES ----------------
@@ -41,6 +42,10 @@
 
 \include{chapters/01_general_introduction}
 
+% ---------------- PART I ----------------
+
+\part{Company and Environment}
+
 % ---------------- CHAPTER 1 ----------------
 
 \include{chapters/02_company_overview}
@@ -49,13 +54,21 @@
 
 \include{chapters/03_technical_environment}
 
-% ---------------- CHAPTER 3 ----------------
+% ---------------- PART II ----------------
 
-\include{chapters/04_tasks_performed/index}
+\part{Performed Tasks}
+
+\include{chapters/04_dark_mode_implementation}
+
+\include{chapters/05_storybook_update_with_mcp}
+
+\include{chapters/06_vis_reg_tests}
+
+\include{chapters/07_ci_report_gcs_access}
 
 % ---------------- CONCLUSION ----------------
 
-\include{chapters/05_conclusion}
+\include{chapters/08_conclusion}
 
 % ---------------- BIBLIOGRAPHY ----------------
 

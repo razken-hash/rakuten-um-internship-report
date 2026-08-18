@@ -1,6 +1,6 @@
-\section{Visual Regression Testing Infrastructure}
+\chapter{Visual Regression Testing Infrastructure}
 
-\subsection{Introduction}
+\section{Introduction}
 
 Modern web applications evolve continuously, and frequent modifications to the \acs{UI} can unintentionally introduce visual defects. Traditional software testing approaches, such as unit and integration testing, mainly verify application behavior, business logic, and component structure. However, they are not sufficient to detect presentation-level regressions affecting layout, typography, colors, images, or component positioning.
 
@@ -14,15 +14,15 @@ The implemented solution targets initially the \texttt{next-common} project and 
 \end{itemize}
 
 
-\subsection{Visual Regression Testing}
+\section{Visual Regression Testing}
 
-\subsubsection{Definition}
+\subsection{Definition}
 
 Visual Regression Testing is a testing technique that detects unintended changes in the rendered appearance of a \ac{UI} by comparing screenshots generated from different application versions.
 
 Unlike traditional automated tests that validate HTML structure, component properties, or application behavior, \ac{VRT} operates at the presentation layer. Any modification affecting the visual output, such as spacing, typography, colors, icons, images, or element positioning, can be detected through a pixel-based comparison.
 
-\subsubsection{Testing Workflow}
+\subsection{Testing Workflow}
 
 The visual regression workflow consists of three main phases:
 
@@ -34,7 +34,7 @@ The visual regression workflow consists of three main phases:
     \item \textbf{Difference analysis:} a pixel-level comparison algorithm identifies visual changes according to a predefined threshold and generates a visual regression report.
 \end{enumerate}
 
-\subsubsection{Reg-Suit}
+\subsection{Reg-Suit}
 
 \textbf{Reg-Suit} is the open-source tool selected to implement the comparison and reporting layer of the \ac{VRT} infrastructure. It is built around a plugin architecture that separates three concerns: identifying which snapshots to compare (key generation), performing the actual pixel comparison, and publishing the resulting artifacts to a storage backend. In the workflow of this project, Reg-Suit is responsible for:
 
@@ -47,17 +47,17 @@ The visual regression workflow consists of three main phases:
 
 Reg-Suit is maintained as an open-source project and is available on its official GitHub repository\footnote{Reg-Suit official repository: \url{https://github.com/reg-viz/reg-suit}}, which also hosts the plugin ecosystem (key generation, publishing, and notification plugins) used to adapt the tool to different \ac{CI} and storage environments \cite{regsuit_repo}.
 
-\subsection{Storybook Stories Screenshot Preparation}
+\section{Storybook Stories Screenshot Preparation}
 
 As introduced in the section \ref{sec:storybook-upgrade}, Storybook is used throughout the \texttt{next-common} project as the primary environment for developing and testing \ac{UI} components in isolation. Because every component already has one or more stories describing its states, Storybook naturally became the entry point for component-level \ac{VRT}: instead of writing dedicated visual test cases, existing stories are reused directly as the source of truth for screenshot generation.
 
-\subsubsection{Building Storybook}
+\subsection{Building Storybook}
 
 Before any screenshot can be captured, the Storybook application is built into a static bundle. Building it upfront, rather than capturing screenshots against a live development server, provides a lightweight and quickly accessible environment: the static build can be served directly to the screenshot workers without incurring the overhead of Storybook's development server (hot module reloading, on-the-fly compilation, etc.), which significantly improves the stability and speed of the capture phase.
 
 This step is not a minor implementation detail. The project currently contains more than \textbf{1,000 stories}. Once the supported dark/light themes and the supported languages are taken into account, the number of individual screenshots that may need to be generated for a full run can reach approximately \textbf{12,000}. At this scale, both the time required to generate screenshots and the storage cost of keeping them in the cloud become first-class engineering concerns, which directly motivated the parallelization strategy described below.
 
-\subsubsection{Automated Screenshot Generation}
+\subsection{Automated Screenshot Generation}
 
 A dedicated script automates the generation of screenshots for every Storybook story, so that the process requires no manual intervention and can run unattended in \ac{CI}.
 
@@ -75,7 +75,7 @@ A dedicated script automates the generation of screenshots for every Storybook s
 
 By distributing the capture work across multiple concurrent workers rather than generating screenshots sequentially, the total time required to produce the complete set of Storybook screenshots is reduced by roughly the same factor as the number of workers, which is essential given the volume of stories described above.
 
-\subsubsection{Storybook-Related Commands}
+\subsection{Storybook-Related Commands}
 
 To simplify the workflow for developers and for the \ac{CI} pipeline, dedicated commands were added to the project:
 
@@ -89,18 +89,18 @@ pnpm book:screenshots
 
 These commands abstract away the details of the build and capture algorithm described above, so that both local developers and \ac{CI} jobs can trigger a full Storybook screenshot generation with a single invocation.
 
-The output of the \texttt{book:screenshots} command is a set of PNG files, one for each story, stored in the \texttt{\_\_storybook\_screenshots\_\_/} directory. This directory is then used as the input for the Reg-Suit comparison phase, which retrieves the corresponding baseline screenshots and produces a visual regression report.
+The output of the \texttt{book:screenshots} command is a set of \ac{PNG} files, one for each story, stored in the \texttt{\_\_storybook\_screenshots\_\_/} directory. This directory is then used as the input for the Reg-Suit comparison phase, which retrieves the corresponding baseline screenshots and produces a visual regression report.
 
-\subsection{End-to-End Tests}
+\section{End-to-End Tests}
 
-\subsubsection{Definition}
+\subsection{Definition}
 
 End-to-end testing is a testing method that validates a complete software workflow by exercising the application the way a real user would, across every layer of the stack, from the user interface down through its integrations, rather than testing an isolated unit or component in artificial conditions \cite{istqb_e2e}. According to the \ac{ISTQB} glossary, end-to-end testing consists of validating business processes from start to finish under production-like circumstances \cite{istqb_e2e}, an approach that is also discussed at length as part of the system and acceptance testing levels in the standard \ac{ISTQB} testing literature \cite{black_foundations}.
 
 
 In the context of this project, \ac{E2E} tests are used not only to validate functional behavior but also as the trigger points from which visual screenshots are captured, since they reproduce realistic, fully rendered application states.
 
-\subsubsection{E2E Test Architecture}
+\subsection{E2E Test Architecture}
  
 To make \ac{E2E} tests deterministic and independent from any external service, a fully controlled test environment was built around five building blocks: a mock server, mocked services, mocked data, reusable fixtures, and a dedicated mock application exercised by the Playwright test suite itself.
  
@@ -127,11 +127,11 @@ This mock application uses the mocked services and consumes the mock server with
  
 \paragraph{Playwright Tests} Approximately \textbf{40 \ac{E2E} tests} were implemented using Playwright against the mock application. These tests exercise the main user scenarios and validate that the expected content, layout, and interactive elements are present, providing the functional coverage on top of which visual screenshots are captured.
 
-\subsubsection{Screenshot Generation}
+\subsection{Screenshot Generation}
 
 Playwright is configured to capture a screenshot at the relevant point of each \ac{E2E} test. The screenshot configuration defines parameters such as the viewport size and full-page versus element-level capture. Rendering is also constrained to a consistent browser (Chromium) engine and viewport across local and \ac{CI} runs, so that differences in the underlying rendering environment do not introduce false positives.
 
-\subsubsection{Project Commands}
+\subsection{Project Commands}
 
 The following commands were added to the \texttt{package.json} of the mocked application to simplify the \ac{E2E} workflow:
 
@@ -149,11 +149,11 @@ pnpm test:e2e
 pnpm test:visual:e2e
 \end{lstlisting}
 
-\subsection{Reg-Suit Configuration}
+\section{Reg-Suit Configuration}
 
 As previously mentioned, Reg-Suit is the testing framework used to perform visual comparisons and generate the corresponding report.
 
-\subsubsection{Dependencies and Plugins}
+\subsection{Dependencies and Plugins}
 
 Reg-Suit is installed together with the plugins required to identify snapshots and to publish comparison artifacts. The relevant packages are declared as \texttt{devDependencies}:
 
@@ -175,7 +175,7 @@ Reg-Suit is installed together with the plugins required to identify snapshots a
     \item \textbf{\texttt{reg-publish-gcs-plugin}}: publishes the comparison artifacts (screenshots and report) to a Google Cloud Storage bucket.
 \end{itemize}
 
-\subsubsection{Reg-Suit Configuration File}
+\subsection{Reg-Suit Configuration File}
 
 Reg-Suit is configured through a JSON configuration file, one for the Storybook stories and one for the \ac{E2E} tests, so that both can run and coexist independently. An example configuration is shown below:
 
@@ -239,7 +239,7 @@ The storage is organized according to the following conventions:
     allowing multiple reports to coexist within the same bucket without overwriting one another.
 \end{itemize}
 
-\subsubsection{Project Commands}
+\subsection{Project Commands}
 
 The following commands were added to drive the Reg-Suit workflow:
 
@@ -259,19 +259,19 @@ pnpm reg:open:e2e
 
 Each \texttt{reg:run:*} command wraps the standard \texttt{regsuit run} invocation: it takes the freshly generated screenshots, retrieves the corresponding baseline, runs the comparison, generates the HTML/JSON report, and publishes the resulting artifacts to the configured storage backend, all in a single step.
 
-\subsection{Visual Regression Testing in CI}
+\section{Visual Regression Testing in CI}
 
-\subsubsection{Objective}
+\subsection{Objective}
 
 The \ac{VRT} workflow is triggered automatically whenever a \ac{PR} is opened or updated. Its objective is to compare the screenshots produced from the base branch (Usually \textbf{\texttt{main}}) against the screenshots produced from the \textbf{mergeable version of the \ac{PR}}, so that reviewers can directly inspect the resulting report to identify visual regressions, instead of having to check out the branch locally and manually walk through every page or component. Beyond manual review, the structured, machine-readable comparison output (the \texttt{out.json} result) also opens the door to a further enhancement: automating part of the \ac{PR} review process using \ac{AI}, by feeding the detected differences to a model capable of triaging intentional design changes from genuine regressions.
 
-\subsubsection{GitHub Actions}
+\subsection{GitHub Actions}
 
 The \ac{VRT} workflow is implemented as a GitHub Actions workflow, defined in \texttt{\allowbreak .github/workflows/reg-vis-suit.yml}. It is divided into four jobs to optimize the overall execution time, release runner resources as early as possible, and avoid regenerating screenshots that are already available from previous runs.
 
 \textbf{Note:} GitHub Actions jobs run in parallel by default. However, a dependency between jobs must be declared explicitly using the \texttt{needs} keyword whenever one job depends on the output of another. This behavior is deliberately leveraged in the workflow design described in the following sections.
 
-\subsubsection{CI Workflow}
+\subsection{CI Workflow}
 
 \paragraph{Job 1 --- Retrieve and Validate Commits}
 
@@ -367,7 +367,7 @@ Figure~\ref{fig:regvis_workflow_jobs} illustrates the GitHub Actions workflow us
 \end{figure}
 
 
-\subsubsection{Use Case Example}
+\subsection{Use Case Example}
 
 To illustrate the practical value of the workflow, consider a simple but easy-to-overlook \ac{UI} change: the destination URLs of two buttons in the application footer are accidentally swapped. The application still builds successfully, and the existing functional test suite continues to pass because no application logic is broken and both buttons still point to valid URLs. However, the rendered \ac{UI} no longer matches the approved baseline.
 
@@ -391,8 +391,92 @@ Figure~\ref{fig:footer_red_diff} shows the corresponding difference view of the 
     \label{fig:footer_red_diff}
 \end{figure}
 
+\section{Challenges}
 
-\subsection{Conclusion and Future Improvement}
+Implementing a reliable \ac{VRT} system involves several challenges that can introduce false positives or unnecessarily increase the execution time and storage requirements of the testing pipeline. The main challenges encountered during the implementation are described below.
+
+\subsection{Animations and Transitions}
+
+CSS animations and transitions can introduce visual differences between two screenshots even when the underlying \ac{UI} has not changed. Since the exact state captured by the screenshot may depend on the timing of the animation, consecutive test runs can produce slightly different images.
+
+To ensure deterministic screenshots, animations and transitions are disabled in the test environment. A dedicated CSS rule can be injected before capturing the screenshots:
+
+\begin{lstlisting}[language=css]
+*, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    caret-color: transparent !important;
+    // other rules ...
+}
+\end{lstlisting}
+
+This ensures that elements are captured in a stable state and prevents timing-dependent differences from being incorrectly reported as visual regressions.
+
+\subsection{Dynamic and Non-Deterministic Data}
+
+Some components frequently contain dynamic data that changes between executions, such as randomly generated identifiers, timestamps, dates, counters, or other runtime-generated values. If such values are rendered directly in the \ac{UI}, they can cause screenshots to differ even when no visual change has been introduced.
+
+Whenever possible, these values are replaced with deterministic mock data in the test environment. For example, instead of generating a random identifier:
+
+\begin{lstlisting}[language=typescript]
+const id = crypto.randomUUID();
+\end{lstlisting}
+
+the test environment can provide a fixed value:
+
+\begin{lstlisting}[language=typescript]
+const id = "test-user-001";
+\end{lstlisting}
+
+The same principle applies to dates and timestamps, which can be fixed to a known value during testing. This guarantees that repeated executions produce the same rendered output.
+
+Some elements, however, cannot be easily mocked or are not relevant to visual comparison. For these cases, a dedicated \texttt{no-screenshot} CSS class is used to exclude the corresponding elements from screenshots:
+
+\begin{lstlisting}[language=css]
+.no-screenshot {
+    visibility: hidden !important;
+    // Other rules ...
+}
+\end{lstlisting}
+
+For example, this can be applied to third-party elements such as cookie banners, chat widgets, or other external components whose content is outside the scope of the visual regression tests:
+
+\begin{lstlisting}[language=html]
+<div class="no-screenshot">
+    <!-- Dynamic or irrelevant content -->
+</div>
+\end{lstlisting}
+
+This approach prevents irrelevant or inherently dynamic elements from generating false-positive visual differences.
+
+\subsection{Large and High-Volume Images}
+
+Images can significantly affect both the execution time and the size of the generated visual regression artifacts. Pages containing a large number of high-resolution images may require additional time for all assets to load before a screenshot can be captured. The resulting screenshots are also larger, increasing upload and download times as well as cloud storage consumption.
+
+To ensure that screenshots are captured only after the required images have been loaded, the test environment waits for all relevant images to complete loading before taking the screenshot. For example:
+
+\begin{lstlisting}[language=TypeScript]
+await page.waitForLoadState('networkidle');
+\end{lstlisting}
+
+However, not every image contributes meaningful information to the visual comparison. For example, product images in a product listing may be numerous and large while the visual regression test is primarily concerned with the layout, typography, and structure of the page. Such images can therefore be hidden using the same \texttt{no-screenshot} mechanism:
+
+\begin{lstlisting}[language=html]
+<img
+    class="no-screenshot"
+    src="product-image.jpg"
+    alt="Product"
+/>
+\end{lstlisting}
+
+This optimization has several benefits: it reduces screenshot generation time, decreases the size of the generated artifacts, reduces upload and download times during the \ac{CI} pipeline, and lowers the amount of storage required in \ac{GCS}.
+
+\subsection{Deterministic Rendering}
+
+Overall, the reliability of \ac{VRT} depends on ensuring that the same application state produces the same visual output across different executions. The testing environment therefore needs to control the main sources of non-determinism, including animations, dynamic data, external components, and asynchronous asset loading.
+
+By disabling animations and transitions, replacing dynamic values with deterministic mock data, excluding irrelevant elements, and waiting for required assets to finish loading, the workflow produces stable screenshots that make genuine visual regressions easier to identify while minimizing false positives and unnecessary resource consumption.
+\section{Conclusion and Future Improvement}
 
 The \ac{VRT} infrastructure described in this section provides the \texttt{next-common} project with an automated mechanism for detecting unintended visual changes, at both the component level, through Storybook, and the application level, through \ac{E2E} pages. Its main benefits can be summarized as follows:
 
