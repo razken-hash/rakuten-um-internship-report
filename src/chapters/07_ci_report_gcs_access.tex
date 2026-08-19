@@ -1,11 +1,11 @@
 \chapter{Development of a Proxy for Google Cloud Storage}
 
 \section{Context}
-\acf{CI} pipelines automatically generate numerous artifacts such as tests, code coverage and static analysis reports. These artifacts are essential for validating software quality and approving \acs{PR} throughout the development lifecycle.
+\acf{CI} pipelines automatically generate numerous artifacts such as tests, code coverage and \ac{VRT} reports. These artifacts are essential for validating software quality and approving \acs{PR} throughout the development lifecycle.
 
-Initially, these reports were stored using GitHub Actions Artifacts. Although this solution integrates naturally with GitHub workflows, it presents several limitations. The storage consumed by artifacts continuously increases over time, especially for large visual regression reports, leading to higher infrastructure costs. Moreover, GitHub artifacts cannot be accessed directly through a web browser. Developers must download the archive, extract its contents, and open the report locally before consulting it.
+Initially, some of these reports were stored using GitHub Actions Artifacts. Although this solution integrates naturally with GitHub workflows, it presents several limitations. The storage consumed by artifacts continuously increases over time, especially for large visual regression reports, leading to higher infrastructure costs. Moreover, GitHub artifacts cannot be accessed directly through a web browser. Developers must download the archive, extract its contents, and open the report locally before consulting it.
 
-To overcome these limitations, Rakuten France decided to migrate \ac{CI} artifacts to private \acf{GCS} buckets. \ac{GCS} provides scalable, durable and cost-effective object storage. However, because the buckets remain private, reports cannot be accessed without Google Cloud authentication.
+To overcome these limitations, Rakuten France decided to migrate \ac{CI} artifacts (\ac{VRT} reports) to private \acf{GCS} buckets. \ac{GCS} provides scalable, durable and cost-effective object storage. However, because the buckets remain private, reports cannot be accessed without Google Cloud authentication.
 
 To provide secure yet transparent access to these reports, a proxy application was developed. The application authenticates against Google Cloud Storage on behalf of internal users and exposes reports through \acs{HTTP} endpoints while keeping the storage infrastructure completely private.
 
@@ -173,9 +173,18 @@ The test suite validates:
   \item Rejects invalid folder upload zip bodies
 \end{itemize}
 
-Load tests were also performed to verify that cached authentication tokens are effectively reused, reducing the number of OAuth authentication requests while maintaining low response times.
+Load tests were also performed to verify the effectiveness of the authentication token caching mechanism. In particular, these tests aimed to confirm that cached authentication tokens are correctly reused across successive requests, thereby reducing the number of OAuth authentication requests while maintaining low response times under load.
 
-\section{Summary}
+Figure~\ref{fig:proxy-load-test} presents the result of retrieving the \texttt{index.html} file during the proxy load test. The results demonstrate the proxy's ability to handle concurrent requests while reusing cached authentication tokens, thereby reducing the need for repeated OAuth authentication requests and maintaining low response times.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.95\textwidth]{../assets/ci_reports_gcs_access/proxy-load-test.png}
+    \caption{Result of retrieving the \texttt{index.html} file during the proxy load test}
+    \label{fig:proxy-load-test}
+\end{figure}
+
+\section{Conclusion}
 
 The developed proxy provides secure and efficient access to \ac{CI} artifacts stored in private \ac{GCS} buckets. By combining authenticated access, token caching, streaming, a simple web interface and monitoring endpoints, the application improves report accessibility while preserving the security of the underlying storage infrastructure. Furthermore, the project provided valuable experience covering the complete software engineering lifecycle, from requirements analysis and architecture design to implementation, testing and deployment.
 
