@@ -257,7 +257,7 @@ The storage is organized according to the following conventions:
 
     \item \textbf{pathPrefix}: Each bucket contains two objects (folders), \texttt{storybook} and \texttt{end\_2\_end}, which store the reports and snapshots associated with their respective testing surfaces. Each report is identified using the naming convention
     \[
-        \texttt{<actual\_sha>-vs-<expected\_sha>}
+        \texttt{<actual\_sha>-<expected\_sha>}
     \]
     allowing multiple reports to coexist within the same bucket without overwriting one another.
 \end{itemize}
