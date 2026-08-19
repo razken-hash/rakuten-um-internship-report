@@ -13,7 +13,6 @@ The implemented solution targets initially the \texttt{next-common} project and 
     \item \acf{E2E} page visual testing.
 \end{itemize}
 
-
 \section{Visual Regression Testing}
 
 \subsection{Definition}
@@ -385,17 +384,18 @@ It performs the following steps:
     \end{itemize}
 
     The report URL follows the structure:
-
-    \begin{verbatim}
-    gs://<BUCKET_NAME>/<FOLDER_PATH>/<ACTUAL_SHA>-vs-<EXPECTED_SHA>/index.html
-    \end{verbatim}
+    \[
+        \texttt{\allowbreak gs://<BUCKET\_NAME>/<FOLDER\_PATH>/\allowbreak<ACTUAL\_SHA>-<EXPECTED\_SHA>}
+        \\ \allowbreak
+        \texttt{/index.html}
+    \]
 
     For example, in the \texttt{next-common} case, Storybook reports are stored
     using the following path:
-
-    \begin{verbatim}
-    gs://next-common/storybook/<ACTUAL_SHA>-vs-<EXPECTED_SHA>/index.html
-    \end{verbatim}
+    
+    \[
+        \texttt{gs://next-common/storybook/<ACTUAL\_SHA>-<EXPECTED\_SHA>/index.html}
+    \]
 
     The images displayed in the summary table are referenced using signed
     \acs{GCS} URLs with a validity period of seven days. This duration is

@@ -116,10 +116,10 @@ One of the primary consumers of this shared library is \lstinline|hypernova-vis-
 Figure \ref{fig:architecture} illustrates the overall architecture of the frontend applications at Rakuten France, highlighting the shared foundations, business-oriented applications, and their relationships within the ecosystem.
 
 \begin{figure}[H]
-\centering
-\includegraphics[width=.95\textwidth]{../assets/tech_env/architecture.png}
-\caption{Overall architecture of the frontend applications.}
-\label{fig:architecture}
+    \centering
+    \includegraphics[width=.95\textwidth]{../assets/tech_env/architecture.png}
+    \caption{Overall architecture of the frontend applications.}
+    \label{fig:architecture}
 \end{figure}
 
 
@@ -139,16 +139,15 @@ The deployment pipeline consists of four environments:
     \item \textbf{Production (Prod):} The production environment hosts the live applications used by Rakuten France customers. Deployments to this environment are performed after successful validation in previous stages to ensure application stability, reliability, and minimal service disruption.
 \end{itemize}
 
-Figure \ref{fig:architecture} illustrates the sequence of deployment environments, highlighting the progression from development to production and the isolation of each environment within the shared \ac{K8S} cluster.
+Figure \ref{fig:envs} illustrates the sequence of deployment environments, highlighting the progression from development to production and the isolation of each environment within the shared \ac{K8S} cluster.
 
 \begin{figure}[H]
-\centering
-\includegraphics[width=.95\textwidth]{../assets/tech_env/envs.png}
-\caption{Sequence of deployment environments.}
-\label{fig:envs}
+    \centering
+    \includegraphics[width=.95\textwidth]{../assets/tech_env/envs.png}
+    \caption{Sequence of deployment environments.}
+    \label{fig:envs}
 \end{figure}
 
 Each environment maintains the three most recent deployment versions, allowing rollback operations when necessary. Once a new deployment exceeds this limit, the oldest version is automatically removed and can no longer be restored.
 
 This multi-environment deployment strategy facilitates parallel development, comprehensive testing, collaborative validation, and controlled production releases while leveraging a centralized Kubernetes cluster managed by the Infrastructure team.
-
