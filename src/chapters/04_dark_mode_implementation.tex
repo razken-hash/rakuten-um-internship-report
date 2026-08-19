@@ -361,16 +361,12 @@ The objective of this phase is to ensure that all applications built on top of t
 
 \subsection{Application migration steps}
 
-Each downstream application consuming shared packages such as \texttt{@rakutenfrance/mui}, \texttt{@rakutenfrance/header}, and \texttt{@rakutenfrance/footer} follows the same integration process:
+Each downstream application consuming the \texttt{next-common} packages follows the same integration process:
 
 \begin{enumerate}
     \item \textbf{Upgrade dependencies:} Applications are migrated to the compatible MUI v7 ecosystem and updated shared packages versions to consume the new dark mode capabilities.
 
-    \item \textbf{Update theme-related imports:} Existing imports are adapted to follow the MUI v7 API conventions, especially for theme utilities such as \lstinline|Theme|, \lstinline|styled|, and \lstinline|useTheme|.
-
-    \item \textbf{Integrate the shared theme provider:} Applications are wrapped with the existing \lstinline|MUIProvider| or \lstinline|AppRouterMUIProvider|, which internally uses \lstinline|ThemeContextProvider| to manage theme state, persistence, and synchronization.
-
-    \item \textbf{Initialize the theme before rendering:} The \lstinline|ThemeInitScript| is injected into the application document to ensure that the correct theme is applied before the first render and prevent FOUC issues.
+    \item \textbf{Update theme-related imports:} Existing imports are adapted to follow the MUI v7 API conventions.
 
     \item \textbf{Expose theme switching:} Application interfaces such as headers or user menus can use \lstinline|useThemeContext()| to provide users with a theme toggle functionality.
 
@@ -395,6 +391,39 @@ The validation process includes:
 
 This rollout strategy allows applications to progressively adopt dark mode while relying on the centralized implementation provided by \texttt{next-common}, reducing duplication and ensuring a consistent user experience across the frontend ecosystem.
 
+Figures~\ref{fig:buy-fo-gift-card-light} and~\ref{fig:buy-fo-gift-card-dark} illustrate the transition from light to dark mode in the gift card screen from the \texttt{buy-fo} application while adapting to different theme configurations and preserving the overall layout and visual consistency.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../assets/dark_mode/buy-fo-gift-card-light.png}
+    \caption{Gift card purchase screen displayed in light mode.}
+    \label{fig:buy-fo-gift-card-light}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../assets/dark_mode/buy-fo-gift-card-dark.png}
+    \caption{Gift card purchase screen displayed in dark mode.}
+    \label{fig:buy-fo-gift-card-dark}
+\end{figure}
+
+The following figures present additional screens from different applications
+displayed in dark mode. They illustrate the application of the dark theme
+across different interfaces and use cases.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../assets/dark_mode/vis-fo-products.png}
+    \caption{Product listing screen displayed in dark mode.}
+    \label{fig:vis-fo-products}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../assets/dark_mode/b2c-dashboard.png}
+    \caption{B2C dashboard displayed in dark mode.}
+    \label{fig:b2c-dashboard}
+\end{figure}
 
 \section{Follow-ups and known limitations}
 
