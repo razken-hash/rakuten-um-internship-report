@@ -162,7 +162,7 @@ Resolving these issues ensured that both local development and CI builds remaine
 
 Storybook 10 introduced a \textbf{Model Context Protocol (MCP) server}, an integration point that enables AI assistants, such as the one integrated into the Cursor IDE, to interact directly with Storybook. It allows these assistants to query the story index, retrieve story metadata, and reason about component APIs without relying on UI scraping or directly accessing the file system.
 
-Exploring this capability was an integral part of this task, as it aligns with Rakuten's ``always-improve, always-advance'' principle. The MCP integration opens new possibilities for interacting with and understanding the component library, potentially improving developer productivity and making component discovery and usage more efficient.
+Exploring this capability was an integral part of this task, as it aligns with Rakuten's \texttt{always-improve, always-advance} principle. The MCP integration opens new possibilities for interacting with and understanding the component library, potentially improving developer productivity and making component discovery and usage more efficient.
 
 \textbf{Configuration and Evaluation Steps:}
 
@@ -215,94 +215,41 @@ Figures~\ref{fig:product-no-mcp} and~\ref{fig:products-mcp} illustrate the resul
 
 Performance regressions are notoriously hard to catch during code review. A component that renders in 40\,ms today may quietly grow to 200\,ms after a few refactors, because reviewers cannot easily observe render behavior from a diff. Once the regression lands, it becomes an incident-driven investigation.
 
-The \textbf{Performance Panel} addon (\href{https://github.com/github/storybook-addon-performance-panel}{\texttt{@github-ui/storybook-addon-performance-panel}}) directly addresses this gap. It surfaces a live dashboard inside Storybook --- visible as a \textbf{Performance} panel next to Controls and Actions --- that displays render timings, re-render counts and other performance signals for the currently viewed story. Because every reusable component in \texttt{next-common} has at least one story, wiring the addon in gives us performance visibility everywhere, for free.
+The \textbf{Performance Panel} addon (\href{\allowbreak https://github.com/github/storybook-addon-performance-panel}{\texttt{@github-ui/storybook-addon-performance-panel}}) directly addresses this gap. It surfaces a live dashboard inside Storybook --- visible as a \textbf{Performance} panel next to Controls and Actions --- that displays render timings, re-render counts and other performance signals for the currently viewed story. Because every reusable component in \texttt{next-common} has at least one story, wiring the addon in gives us performance visibility everywhere, for free.
 
 \subsection{Integration steps}
 
 The integration was deliberately kept minimal and reversible.
 
 \begin{enumerate}
-    \item \textbf{Install the dependency.} Added \texttt{@github-ui/storybook-addon-performance-panel} as a \texttt{devDependency} in the Storybook workspace of \texttt{next-common}, then ran \texttt{pnpm install} to update the lockfile. Because this depends on Storybook 10, it could only be added \emph{after} Task 2 was merged --- which is why Task 2 had to come first in the timeline.
+    \item \textbf{Install the dependency.} Added \texttt{\allowbreak @github-ui/storybook-addon-performance-panel} as a \texttt{devDependency} in the Storybook workspace of \texttt{next-common}, then ran \texttt{pnpm install} to update the lockfile. Because this depends on Storybook 10, it could only be added \emph{after} Task 2 was done --- which is why Task 2 had to come first in the timeline.
     \item \textbf{Register the addon in the manager.} Added the addon package name to the \texttt{addons} array in \texttt{.storybook/main.ts}, respecting the order convention (essential addons first, developer-experience addons after).
     \item \textbf{Compose the decorator in preview.} Imported the addon's decorator in \texttt{.storybook/preview.ts} and appended it to the global \texttt{decorators} array so it wraps every story without any per-story change.
     \item \textbf{Validate on a representative story.} Verified that the \textbf{Performance} panel appears in the Storybook toolbar and that switching between stories updates the metrics live. I validated this on a heavy, representative story (a data-dense product card grid) rather than a trivial one, because the addon's value shows most clearly on non-trivial trees.
 \end{enumerate}
 
-The full integration was under 15 lines of code.
-
-\begin{figure}[h]
-    \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~6 \vspace{2cm}}}
-    \caption{The Performance panel visible in the Storybook UI for the \texttt{ProductCardGrid} story.}
-    \label{fig:x6-perf-panel}
-\end{figure}
-
-\subsection{Acceptance criteria --- verification}
+\subsection{Validation}
 
 \begin{itemize}
-    \item \texttt{@github-ui/storybook-addon-performance-panel} is added as a dependency in \texttt{next-common} Storybook. \textbf{Verified.}
-    \item Addon is registered in \texttt{.storybook/main.ts}. \textbf{Verified.}
-    \item Addon decorator is composed in \texttt{.storybook/preview.ts}. \textbf{Verified.}
-    \item Storybook shows a \textbf{Performance} panel when viewing stories. \textbf{Verified} on Chrome and Edge (the browsers the addon documentation recommends for the full metric set).
-    \item At least one representative story is validated with the panel working. \textbf{Verified} on \texttt{ProductCardGrid} and confirmed on two additional stories to make sure the wiring was not story-specific.
+    \item \texttt{@github-ui/storybook-addon-performance-panel} is added as a dependency in \texttt{next-common} Storybook.
+    \item Addon is registered in \texttt{.storybook/main.ts}.
+    \item Addon decorator is composed in \texttt{.storybook/preview.ts}.
+    \item Storybook shows a \textbf{Performance} panel when viewing stories.
+    \item The Header component's story is validated with the panel working.
 \end{itemize}
 
-\subsection{Recommended usage}
+\section{Challenges}
 
-I also added a short ``How to read the Performance panel'' note to the internal Storybook docs page, so contributors know:
+Beyond the issues specific to each task, two cross-cutting challenges influenced the overall approach. First, the three tasks were interdependent: Task 3 depended on Task 2, while Task 2 was easier to complete after the toolchain modernization introduced by Task 1. To manage these dependencies, the pull requests were sequenced accordingly and kept small enough to be reviewed independently rather than combining all changes into a single large and difficult-to-review contribution.
 
-\begin{itemize}
-    \item Which metrics are meaningful for our stack (mount time, re-render count under prop churn).
-    \item Which are noisy in a Storybook context and should not be treated as absolute (initial paint on a cold dev server).
-    \item How to compare two branches by opening two Storybook tabs side by side.
-\end{itemize}
+Another important challenge was ensuring that the work remained useful for future contributors. Non-trivial migration steps and decisions were documented in the commit messages, providing a reference that can simplify future Storybook or Node.js upgrades and reduce the maintenance effort required for similar migrations.
 
-\section{Cross-Cutting Challenges and How I Handled Them}
-
-Beyond the per-task issues already documented, three cross-cutting challenges shaped how I approached the work:
-
-\begin{itemize}
-    \item \textbf{Coordinating three interdependent tickets.} Task 3 depends on Task 2, and Task 2 is significantly easier on Task 1's toolchain. I sequenced the PRs accordingly and kept them small enough to be reviewed independently, instead of bundling everything into a single unreviewable diff.
-    \item \textbf{Not breaking downstream consumers.} \texttt{next-common} is consumed by other repositories. I audited its public exports before and after each upgrade and confirmed that no public API surface changed, so downstream consumers only had to bump the version.
-    \item \textbf{Documenting for future contributors.} Every non-trivial migration step (MDX 3 strictness, \texttt{essentials} split, \texttt{packageManager} field, Docker base image change) was written down in the PR description and in the repository's \texttt{CONTRIBUTING.md}. The goal was to make the next Storybook or Node upgrade cheaper than this one.
-\end{itemize}
-
-\begin{figure}[h]
-    \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~7 \vspace{2cm}}}
-    \caption{PR overview showing the three sequential pull requests and their green CI status.}
-    \label{fig:x7-prs}
-\end{figure}
-
-\section{Results and Impact}
-
-The combined outcome of the three tasks:
-
-\begin{itemize}
-    \item \textbf{Modern runtime.} \texttt{next-common} now runs on Node 24 (Active LTS) and pnpm 10, consistent with the rest of the organization's repositories. CI images are rebuilt on the same baseline.
-    \item \textbf{Modern component workshop.} Storybook 10 is live, with a faster dev server, cleaner configuration, an audited addon set, and no addon left behind.
-    \item \textbf{New AI-assisted workflow surface.} Through the Storybook MCP server, AI assistants can now reason about \texttt{next-common} stories in a structured way, which is a genuine change in how the library can be consumed and extended.
-    \item \textbf{Continuous performance visibility.} Every developer opening any story in \texttt{next-common} now sees a Performance panel by default, turning performance from an occasional audit into an ambient signal.
-\end{itemize}
-
-Together, these three changes shift \texttt{next-common} from a \emph{maintenance-friction} posture to an \emph{actively improving} posture --- which is precisely the theme of the branch this work targeted (\texttt{release/always-improve-always-advance}).
-
-\section{Lessons Learned}
-
-Reflecting on the internship work in this chapter, the main technical and methodological takeaways are:
-
-\begin{itemize}
-    \item \textbf{Sequence upgrades so that each unlocks the next.} Attempting the Storybook upgrade before the Node/pnpm upgrade would have wasted effort --- many v10 dependencies simply refuse to install on old runtimes. Ordering matters.
-    \item \textbf{Prefer small, reviewable PRs on shared libraries.} A shared library is a high-leverage artifact; a broken commit has organization-wide blast radius. Splitting the work into three PRs made reviews faster and rollbacks safer.
-    \item \textbf{Codemods are a starting point, not a substitute for reading the migration guide.} Storybook's codemod handled roughly 80\% of the mechanical work, but the remaining 20\% --- the parts that matter --- required reading the official guide and understanding the \emph{intent} behind each breaking change.
-    \item \textbf{New protocol surfaces (MCP) are worth exploring early.} The Storybook MCP server is not yet mainstream, but adopting it early gave me a concrete view of how AI-assisted workflows can be grounded in real project metadata rather than raw source-code scraping.
-    \item \textbf{Developer-experience tooling deserves the same rigor as production code.} The Performance Panel addon integration is only 15 lines of code, but choosing the right addon, validating it on a representative story, and documenting how to read its output is what turns those 15 lines into an actual team-level improvement.
-\end{itemize}
+Finally, ensuring the compatibility of the upgraded tools and dependencies required careful validation throughout the migration. Each upgrade was tested independently before moving to the next task, helping identify potential regressions early and ensuring that the final changes remained stable.
 
 \section{Conclusion}
 
-This chapter documented three interconnected improvements to \texttt{next-common}: a runtime upgrade to Node 24 and pnpm 10, a Storybook upgrade to v10 with an exploration of its new MCP server, and the addition of the Storybook Performance Panel addon. Each task was small enough to ship independently, but together they constitute a coherent modernization of the front-end platform used across the organization.
+This work modernized \texttt{next-common} across three complementary areas: its runtime, its component development environment, and its development tooling. The project was upgraded to Node 24 and pnpm 10, Storybook was upgraded to version 10 with an updated addon ecosystem, and the Storybook MCP server was explored to enable AI-assisted interaction with the component library. The Performance Panel was also integrated to provide continuous performance visibility during development.
 
-The work aligned squarely with the branch it targeted --- \texttt{release/always-improve-always-advance} --- and left \texttt{next-common} on a foundation that is faster to iterate on, safer to maintain, and more open to AI-assisted development workflows for the teams that will inherit it.
+Together, these improvements reduce maintenance effort, improve the developer experience, and provide a more modern foundation for future frontend development, in line with the \texttt{always-improve-always-advance} objective.
 
 \clearpage

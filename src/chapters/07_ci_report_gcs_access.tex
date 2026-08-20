@@ -184,6 +184,103 @@ Figure~\ref{fig:proxy-load-test} presents the result of retrieving the \texttt{i
     \label{fig:proxy-load-test}
 \end{figure}
 
+\section{Building and Deployment}
+
+The proxy application is containerized using Docker and deployed through the existing GitHub Actions-based \acs{CI}/\acs{CD} infrastructure. This approach provides a reproducible build process and ensures that the same container image is used throughout the deployment process.
+
+\subsection{Building the Docker Image}
+
+A dedicated \texttt{Dockerfile} is used to package the application into a production-ready Docker image. Several optimization techniques are applied to reduce both the build time and the size of the final image:
+
+\begin{itemize}
+    \item \textbf{Dependency caching with pnpm:} The CI/CD environment uses the caching mechanism provided by \texttt{pnpm} to reuse previously downloaded dependencies. Instead of downloading all packages from the registry for every build, packages already available in the pnpm store can be reused, reducing network transfers and dependency installation time.
+
+    \item \textbf{Distroless runtime image:} The runner stage is based on a \textbf{Distroless} Node.js image \texttt{gcr.io/distroless/nodejs24-debian12}. Distroless images contain only the components required to execute the application and omit unnecessary operating-system utilities, such as package managers, shells and other command-line tools. This reduces the final image size and attack surface while providing a lightweight production environment.
+
+    \item \textbf{Docker layer caching:} The \texttt{package.json} and \texttt{pnpm-lock.yaml} files are copied before the application source code. This allows Docker to reuse the dependency installation layer as long as the project's dependencies have not changed. Consequently, modifications to the application source code do not trigger a complete reinstallation of \texttt{node\_modules}.
+\end{itemize}
+
+These optimization techniques result in a smaller production image and a faster, more efficient CI/CD build process while maintaining a reproducible application build.
+
+The Dockerfile used for the application is illustrated below:
+
+\begin{lstlisting}[language=Docker, caption={Dockerfile for the production image}, label={lst:gcs-proxy-dockerfile}]
+FROM gcr.io/distroless/nodejs24-debian12:nonroot AS runner
+
+ENV PORT=3000 \
+    NODE_ENV=production
+
+# Only needed for local development.
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
+WORKDIR /app
+
+COPY --chown=nonroot:nonroot package.json pnpm-lock.yaml .npmrc .env ./
+COPY --chown=nonroot:nonroot node_modules ./node_modules
+COPY --chown=nonroot:nonroot public ./public
+COPY --chown=nonroot:nonroot dist ./dist
+
+EXPOSE 3000
+
+CMD ["/app/dist/index.js"]
+\end{lstlisting}
+
+\subsection{Deployment}
+
+The build and deployment process is integrated into the project's GitHub Actions workflow. When the application is built, the workflow uses the Dockerfile to generate the production image and publishes it to the organization's container registry. The resulting image is then used to deploy the application to the \textbf{Dev8} environment.
+
+The deployment process can be summarized as follows:
+
+\begin{enumerate}
+
+    \item The application source code is checked out by the GitHub Actions workflow.
+
+    \item The project dependencies are installed and the application is built in the CI/CD environment.
+
+    \item The Docker image is built using the project's \texttt{Dockerfile}. The build process reuses the dependencies installed in the CI/CD environment and copies the required application artifacts, including \texttt{node\_modules}, \texttt{dist}, and \texttt{public}, from the GitHub Actions runner into the Docker image.
+
+    \item The generated Docker image is tagged with a version identifier and published to the internal container registry.
+
+    \item The Dev8 deployment process retrieves the published image from the container registry.
+
+    \item The application is started in a container using the newly deployed image and the configuration provided by the infrastructure environment.
+
+    \item Consul verifies the availability of the deployed service by periodically querying the application's health-check endpoint. If the service responds with a healthy status, the deployment is considered operational.
+
+\end{enumerate}
+
+A dedicated GitHub Action provided by the internal \texttt{shared-actions} repository is used to version the Docker image according to \ac{SemVer} (\textit{Semantic Versioning}) rules. This ensures that each published image receives a consistent and meaningful version identifier based on the changes introduced in the application.
+
+The generated version is used as the Docker image tag and associates the deployed container image with a specific version of the source code. This provides traceability throughout the deployment lifecycle and makes it possible to identify and reproduce the exact application version deployed to the Dev8 environment.
+
+\subsection{Environment Configuration and Secrets}
+
+The application requires several environment variables to configure its runtime behavior, including the credentials and configuration required to access Google Cloud Storage. These values are not stored directly in the source code or Docker image.
+
+Instead, the required environment variables are defined in the repository's \texttt{config-unified} in an encrypted form. This configuration provides a centralized mechanism for managing environment-specific values while preventing sensitive information from being exposed in the repository.
+
+The decryption and injection of these values are handled by the \textbf{Infrastructure team}. During deployment, the infrastructure layer retrieves and decrypts the required configuration, then passes the resulting environment variables to the running application.
+
+Consequently, sensitive configuration remains separated from both the application source code and the Docker image. The application only receives the required values at runtime, while the infrastructure team remains responsible for their secure storage, decryption and injection.
+
+\subsection{Deployment to Dev8}
+
+The application is deployed to the \textbf{Dev8} environment after its Docker image has been successfully published. The infrastructure deployment mechanism retrieves the corresponding image from the container registry and starts the application with the appropriate Dev8 configuration.
+
+The deployment architecture separates application concerns from infrastructure concerns. The development team is responsible for the application code, Docker image and CI workflow, while the Infrastructure team manages the deployment environment, secrets, environment variables and the mechanisms used to securely inject them into the application.
+
+After deployment, the application's \texttt{/health} endpoint is monitored by \textbf{Consul}, the service discovery and health-check tool used within the infrastructure. Consul periodically sends requests to this endpoint to verify that the service is operational and responding correctly. This integrates the deployment process with the health-check and monitoring mechanisms described previously, allowing the infrastructure to detect service failures and react accordingly.
+
+\section{Back to VRT Infrastructure}
+
+Once the proxy application has been successfully deployed and its availability has been verified, a few minor modifications are made to the existing \ac{VRT} infrastructure. The objective is to integrate the newly deployed proxy into the existing workflow without changing the overall report generation and publication process.
+
+The \ac{VRT} workflow is updated to replace direct references to the private \ac{GCS} URLs with the corresponding proxy URLs and endpoints. As a result, subsequent requests to access, verify, search, or download \ac{VRT} reports are routed through the proxy rather than directly to \ac{GCS}.
+
+This modification allows the \ac{VRT} infrastructure to benefit from the proxy's authentication and access mechanisms while keeping the underlying \ac{GCS} buckets private. It also avoids requiring the \ac{VRT} workflow or end users to handle Google Cloud authentication directly.
+
+\textbf{Note:} GitHub applies URL sanitization mechanisms that prevent images served through the proxy application from being rendered correctly (Because the proxy application is only accessible from within the Rakuten infrastructure). As a temporary workaround, time-limited \ac{GCS} URLs with a validity period of 7 days are used for images embedded in \ac{VRT} reports. This approach preserves the ability to display the images while limiting the exposure period of the underlying resources.
+
 \section{Conclusion}
 
 The developed proxy provides secure and efficient access to \ac{CI} artifacts stored in private \ac{GCS} buckets. By combining authenticated access, token caching, streaming, a simple web interface and monitoring endpoints, the application improves report accessibility while preserving the security of the underlying storage infrastructure. Furthermore, the project provided valuable experience covering the complete software engineering lifecycle, from requirements analysis and architecture design to implementation, testing and deployment.

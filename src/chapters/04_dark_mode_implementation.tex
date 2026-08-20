@@ -425,18 +425,12 @@ across different interfaces and use cases.
     \label{fig:b2c-dashboard}
 \end{figure}
 
-\section{Follow-ups and known limitations}
+\section{Conclusion and Future Improvements}
 
-Although the dark mode foundation is fully implemented, some additional improvements and considerations remain:
+The dark mode implementation established a centralized and reusable foundation across the frontend ecosystem. By introducing shared CSS variables, the \texttt{ThemeContextProvider}, MUI v7 support, and progressive integration into consuming applications, the solution provides a consistent theme management mechanism while reducing duplicated logic. The implementation was also validated through Storybook and Chromatic to ensure visual consistency across both themes.
 
-\begin{itemize}
-    \item \textbf{CSS variable transparency handling:} MUI's \lstinline|alpha()| utility cannot directly process CSS variables. Components requiring transparency rely on predefined overlay tokens instead.
+Although the foundation is fully implemented, several improvements remain possible. Handling transparency with CSS variables could be further improved, visual assets may require additional theme-specific adaptations, and the remaining applications can progressively adopt the shared dark mode infrastructure. Future development should also continue using Storybook and Chromatic to monitor visual regressions and maintain consistency between light and dark themes.
 
-    \item \textbf{Asset-specific adaptations:} Some visual assets may require dedicated handling when their original design does not support both themes.
-
-    \item \textbf{Progressive adoption:} Existing applications must migrate progressively by updating dependencies, replacing hardcoded colors, and integrating the shared theme provider.
-
-    \item \textbf{Visual regression monitoring:} Storybook and Chromatic remain the main tools for detecting visual regressions and ensuring theme consistency during future developments.
-\end{itemize}
+Overall, this work provides a scalable foundation for dark mode across the frontend ecosystem while leaving room for further refinement and progressive adoption.
 
 \clearpage

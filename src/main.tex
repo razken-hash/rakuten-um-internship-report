@@ -101,6 +101,19 @@
       {9}{{{\color{blue}9}}}{1}
 }
 
+\lstdefinelanguage{Docker}{
+    keywords={
+        FROM,RUN,CMD,ENTRYPOINT,LABEL,MAINTAINER,
+        EXPOSE,ENV,ADD,COPY,WORKDIR,ARG,
+        ONBUILD,STOPSIGNAL,HEALTHCHECK,SHELL,
+        AS
+    },
+    sensitive=true,
+    comment=[l]{\#},
+    morestring=[b]",
+    morestring=[b]',
+}
+
 % Acronyms
 \usepackage{acronym}
 
