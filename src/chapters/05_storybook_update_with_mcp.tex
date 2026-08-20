@@ -14,14 +14,7 @@ During this internship, I was assigned three connected tasks on the \texttt{next
 
 Although the three tasks were tracked as separate tickets, they form a coherent modernization effort: the Node/pnpm upgrade unblocks the Storybook upgrade, and the Storybook upgrade unlocks the ecosystem of v10-compatible addons including both the MCP server and the Performance Panel.
 
-The following section presents these tasks in a logical order, explains the reasoning behind each decision and documents the encountered migration issues.
-
-\begin{figure}[h]
-    \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~1 \vspace{2cm}}}
-    \caption{High-level overview of the \texttt{next-common} platform and the three modernization tasks.}
-    \label{fig:x1-overview}
-\end{figure}
+The following sections present these tasks in a logical order, explain the reasoning behind each decision and document the encountered migration issues.
 
 \section{Task 1: Upgrading the Runtime Environment}
 
@@ -36,8 +29,6 @@ The objective of this task was therefore to upgrade the project to \textbf{Node.
 The migration affected the different parts of the development infrastructure.
 \begin{table}[H]
 \centering
-\caption{Main changes introduced during the runtime upgrade}
-\label{tab:runtime-upgrade}
 
 \begin{tabular}{|p{4cm}|p{11cm}|}
 \hline
@@ -61,6 +52,8 @@ Updated the project documentation to reflect the new runtime prerequisites for c
 \hline
 
 \end{tabular}
+\caption{Main changes introduced during the runtime upgrade}
+\label{tab:runtime-upgrade}
 \end{table}
 
 The Docker image used by the CI pipeline was also updated to rely on the new runtime environment, ensuring that local development and automated builds execute under identical conditions.
@@ -80,7 +73,7 @@ Successful execution of these workflows confirmed that the migration was fully c
 
 \subsection{Context and Motivation}
 
-Storybook\footnote{Storybook Definition} plays a central role in the \texttt{next-common} ecosystem. Beyond serving as a component development environment, it acts as the primary platform for documenting reusable components, validating UI behavior, and performing visual regression testing before components are consumed by downstream applications.
+Storybook plays a central role in the \texttt{next-common} ecosystem. Beyond serving as a component development environment, it acts as the primary platform for documenting reusable components, validating UI behavior, and performing visual regression testing before components are consumed by downstream applications.
 
 The objective of this task was twofold:
 
@@ -91,7 +84,7 @@ The objective of this task was twofold:
 
 Besides benefiting from performance improvements and long-term maintenance, upgrading Storybook also enabled the adoption of newer addons and tooling that are only available for recent Storybook versions.
 
-\subsection{Migration strategy}
+\subsection{Migration Strategy}
 
 To minimize the migration risk, the upgrade was performed incrementally rather than replacing the entire configuration at once.
 
@@ -101,32 +94,16 @@ The migration followed four main steps:
     \item Inventorying all Storybook-related packages and addons currently used by the repository.
     \item Executing the official Storybook migration utility (\lstinline|pnpm dlx storybook@latest upgrade|) to automate the majority of the configuration changes.
     \item Reviewing the Storybook v10 migration guide and manually adapting the remaining breaking changes.
+    \item Migrating deprecated configuration options to their Storybook v10 equivalents.
+    \item Updating the preview configuration by introducing the strongly typed \lstinline|Preview| object and reorganizing global decorators.
     \item Validating the migration locally before executing the complete CI pipeline.
 \end{enumerate}
 
 This approach allowed automated transformations to be combined with manual verification, reducing the likelihood of regressions.
 
-\subsection{Configuration updates}
+\subsection{Addons Migration}
 
-Several configuration files required modifications to comply with Storybook v10.
-
-The most significant changes included:
-
-\begin{itemize}
-    \item Updating the Storybook framework configuration to use the new typed object syntax.
-    \item Revising story discovery patterns to explicitly include MDX documentation files.
-    \item Migrating deprecated configuration options to their Storybook v10 equivalents.
-    \item Updating the preview configuration by introducing the strongly typed \lstinline|Preview| object and reorganizing global decorators.
-    \item Updating documentation parameters to support the new Docs renderer.
-\end{itemize}
-
-The migration also required updating the framework packages by replacing the previous Next.js integration with the newer \lstinline|@storybook/nextjs-vite| package and upgrading Vite to a compatible version.
-
-\subsection{Addon migration}
-
-Storybook addons were individually reviewed to verify their compatibility with version 10.
-
-The migration involved:
+Storybook addons were individually reviewed to verify their compatibility with version 10. This migration involved:
 
 \begin{itemize}
     \item Replacing the deprecated \lstinline|@storybook/addon-essentials| package with its individual addons.
@@ -137,32 +114,34 @@ The migration involved:
 
 Table~\ref{tab:addon-compat} summarizes the compatibility status of the different addons.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \textbf{Addon} & \textbf{Status} & \textbf{Action} \\
+        \hline
+        \texttt{@storybook/addon-essentials} & Deprecated &
+        Split into individual addons. \\
+        \hline
+        \texttt{@storybook/addon-a11y} & Compatible &
+        Updated to v10. \\
+        \hline
+        \texttt{@storybook/addon-links} & Compatible &
+        Updated. \\
+        \hline
+        \texttt{@storybook/addon-interactions} & Compatible &
+        Updated with minor API adaptations. \\
+        \hline
+        Internal custom addons & Required migration &
+        Adapted to the new registration API. \\
+        \hline
+        Community addons & Mixed &
+        Updated, replaced or removed depending on compatibility. \\
+        \hline
+    \end{tabularx}
     \caption{Storybook v10 addon compatibility}
     \label{tab:addon-compat}
-    \begin{tabularx}{\textwidth}{@{}l l X@{}}
-        \toprule
-        \textbf{Addon} & \textbf{Status} & \textbf{Action} \\
-        \midrule
-        \texttt{@storybook/addon-essentials} & Deprecated & Split into individual addons. \\
-        \texttt{@storybook/addon-a11y} & Compatible & Updated to v10. \\
-        \texttt{@storybook/addon-links} & Compatible & Updated. \\
-        \texttt{@storybook/addon-interactions} & Compatible & Updated with minor API adaptations. \\
-        Internal custom addons & Required migration & Adapted to the new registration API. \\
-        Community addons & Mixed & Updated, replaced or removed depending on compatibility. \\
-        \bottomrule
-    \end{tabularx}
 \end{table}
-
-Figure~\ref{fig:storybook-v10} illustrates the upgraded Storybook interface after the migration.
-
-\begin{figure}[H]
-    \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder \vspace{2cm}}}
-    \caption{Storybook v10 running with the updated configuration.}
-    \label{fig:storybook-v10}
-\end{figure}
 
 \subsection{Migration challenges}
 
@@ -181,47 +160,20 @@ Resolving these issues ensured that both local development and CI builds remaine
 
 \subsection{Exploring the Storybook MCP server}
 
-One of the most significant new features introduced in Storybook 10 is the Model Context Protocol (MCP) server.
+Storybook 10 introduced a \textbf{Model Context Protocol (MCP) server}, an integration point that enables AI assistants, such as the one integrated into the Cursor IDE, to interact directly with Storybook. It allows these assistants to query the story index, retrieve story metadata, and reason about component APIs without relying on UI scraping or directly accessing the file system.
 
-Unlike traditional documentation, the MCP server exposes Storybook metadata through a standardized protocol that can be consumed directly by AI assistants. Instead of manually searching for stories or component APIs, an AI agent can query the running Storybook instance to retrieve information about available components, their properties, documentation, and examples.
+Exploring this capability was an integral part of this task, as it aligns with Rakuten's ``always-improve, always-advance'' principle. The MCP integration opens new possibilities for interacting with and understanding the component library, potentially improving developer productivity and making component discovery and usage more efficient.
 
-This capability opens new possibilities for AI-assisted frontend development, including:
-
-\begin{itemize}
-    \item Discovering available components without manually browsing Storybook.
-    \item Generating implementation examples based on existing stories.
-    \item Assisting developers in selecting reusable components that match their requirements.
-    \item Reducing hallucinations by allowing AI assistants to rely on the actual component library instead of prior knowledge.
-\end{itemize}
-
-Although the MCP server was explored as part of this internship, it was not yet integrated into the team's daily development workflow. Nevertheless, it represents a promising direction for future AI-assisted development within the frontend platform.
-
-\subsection{Validation}
-
-Following the migration, the upgraded Storybook environment was successfully validated.
-
-The validation process confirmed that:
+\textbf{Configuration and Evaluation Steps:}
 
 \begin{itemize}
-    \item Storybook dependencies were successfully upgraded to version 10.
-    \item Development mode (\lstinline|pnpm book|) executed correctly.
-    \item Static builds (\lstinline|pnpm book:build|) completed successfully both locally and in CI.
-    \item Existing addons remained functional after migration or were replaced by supported alternatives.
-    \item Shared components continued to render correctly, ensuring backward compatibility for downstream applications.
-\end{itemize}
 
-\subsection{Exploring the Storybook MCP server}
+    \item Registering the Storybook MCP server locally in the IDE's MCP configuration.
 
-Storybook 10 introduced a \textbf{Model Context Protocol (MCP) server} --- an integration point that lets AI assistants (like the one in the IDE I use daily) query Storybook's story index, read story metadata, and reason about component APIs without needing to scrape the running UI or the file system directly.
+    \item Verifying that the assistant could list stories, retrieve their \texttt{args} and \texttt{argTypes}, and answer natural-language questions such as \emph{``Which stories in \texttt{next-common} render the \texttt{Button} in its \texttt{disabled} state?''} without requiring any source code to be manually provided.
 
-I spent time exploring this new capability because it is directly relevant to the ``always-improve-always-advance'' theme of the internship: it changes how developers can interact with the component library.
+    \item Using vibe coding to build a \texttt{/products} page that lists all available products in two scenarios: one with access to the Storybook MCP server and one without it, in order to compare the development experience and evaluate the benefits of MCP-assisted development.
 
-\textbf{What I did to explore it:}
-
-\begin{itemize}
-    \item Registered the Storybook MCP server locally against my IDE's MCP configuration.
-    \item Verified that the assistant could list stories, retrieve their args/argTypes, and answer natural-language questions such as \emph{``Which stories in \texttt{next-common} render the \texttt{Button} in its \texttt{disabled} state?''} without me pasting any code.
-    \item Prototyped a small workflow where I asked the assistant to draft a new story for an existing component; because the MCP server exposes the argTypes of the component, the generated story was consistent with the actual component API rather than hallucinated.
 \end{itemize}
 
 \textbf{Observations:}
@@ -229,15 +181,32 @@ I spent time exploring this new capability because it is directly relevant to th
 \begin{itemize}
     \item The MCP server is a genuine productivity multiplier for teams that already maintain a rich Storybook. It effectively turns the story catalog into a queryable knowledge base for AI assistants.
     \item Because it exposes structured story metadata rather than raw source code, it is a safer surface to grant an assistant than blanket repository access.
-    \item Adoption inside the team will require a short internal guide, which I drafted and included in the PR description so reviewers could try it locally.
 \end{itemize}
 
-\begin{figure}[h]
+Figures~\ref{fig:product-no-mcp} and~\ref{fig:products-mcp} illustrate the results of implementing the \texttt{/products} page using vibe coding, first without access to the Storybook MCP server and then with MCP enabled. The comparison highlights the differences in the development experience and demonstrates how access to Storybook's component metadata can assist the AI assistant in understanding and reusing the available components.
+
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering \vspace{2cm} Placeholder for Figure~5 \vspace{2cm}}}
-    \caption{AI assistant querying the Storybook MCP server to list \texttt{Button} stories.}
-    \label{fig:x5-mcp}
+    \includegraphics[width=1\textwidth]{../assets/storybook_upgrade/products-no-mcp.png}
+    \caption{\texttt{/products} page generated without access to the Storybook MCP server.}
+    \label{fig:product-no-mcp}
 \end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{../assets/storybook_upgrade/products-mcp.png}
+    \caption{\texttt{/products} page generated with access to the Storybook MCP server.}
+    \label{fig:products-mcp}
+\end{figure}
+
+\subsection{Validation}
+\begin{itemize}
+    \item Storybook dependencies were successfully upgraded to version 10.
+    \item Development mode (\lstinline|pnpm book|) executed correctly.
+    \item Static builds (\lstinline|pnpm book:build|) completed successfully both locally and in CI.
+    \item Existing addons remained functional after migration.
+    \item Shared components continued to render correctly, ensuring backward compatibility for downstream applications.
+\end{itemize}
 
 \section{Task 3 --- Adding the Storybook Performance Panel Addon}
 \label{sec:task3-perf-panel}
