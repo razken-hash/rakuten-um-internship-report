@@ -109,9 +109,7 @@ The platform is consumed by several business-oriented applications:
     \item \lstinline|vis-fo|: the frontend dedicated to visual merchandising and storefront presentation, offering tools to manage the visual display of products and promotional content.
 \end{itemize}
 
-Alongside the Next.js-based ecosystem, Rakuten France also maintains a Hypernova-based frontend architecture. Similar to \lstinline|next-common|, \lstinline|hypernova-next-common| provides a shared library of reusable components, utilities, and common services for Hypernova applications. It serves as the common foundation for applications built on the Hypernova framework.
-
-One of the primary consumers of this shared library is \lstinline|hypernova-vis-fo|, the Hypernova implementation of the visual merchandising frontend, which relies on \lstinline|hypernova-next-common| to ensure consistency, code reuse, and maintainability across the Hypernova ecosystem.
+Alongside the Next.js-based ecosystem, Rakuten France also maintains \lstinline|hypernova-common-services|, which provides an \acs{API} for \acs{SSR} of React components. This API is used by both the \lstinline|monolithic| application and \lstinline|price-mobile|.
 
 Figure \ref{fig:architecture} illustrates the overall architecture of the frontend applications at Rakuten France, highlighting the shared foundations, business-oriented applications, and their relationships within the ecosystem.
 
